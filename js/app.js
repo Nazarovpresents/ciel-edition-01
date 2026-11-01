@@ -1,6 +1,9 @@
 /* ------------------------------------------------------------------
    CIEL — Édition 01
-   Scene engine + UI. Vanilla JS, no dependencies.
+   Scene engine v2: turntable frame sequences on a canvas.
+   - drag / scroll / slider  → rotate the jacket (or the model) 360°
+   - arrows / swatches / tiles → switch product (crossfade in place)
+   - "See it on"              → crossfade to the on-model turntable
 ------------------------------------------------------------------- */
 (() => {
   'use strict';
@@ -13,7 +16,6 @@
       composition: 'Shell: 100% brushed cotton jacquard, 320 g. Lining: cupro. Ribbing: cotton–elastane. Zip: matte zinc, two-way.',
       care: 'Wash cold, inside out, gentle cycle. Dry flat away from direct sun. Warm iron on reverse. Do not tumble dry.',
       lowSizes: ['XL'],
-      tag: { rack: [0.505, 0.135], model: [0.545, 0.245] },
     },
     {
       id: 'sable', name: 'Sable', price: 159, ref: 'Ref. 0913-SAB', swatch: '#e7e0d2',
@@ -21,7 +23,6 @@
       composition: 'Shell: 100% brushed cotton jacquard, 320 g. Lining: cupro. Ribbing: cotton–elastane. Zip: matte zinc, two-way.',
       care: 'Wash cold, inside out, gentle cycle. Dry flat away from direct sun. Warm iron on reverse. Do not tumble dry.',
       lowSizes: [],
-      tag: { rack: [0.50, 0.125], model: [0.545, 0.245] },
     },
     {
       id: 'ardoise', name: 'Ardoise', price: 139, ref: 'Ref. 0914-ARD', swatch: '#7e8184',
@@ -29,26 +30,29 @@
       composition: 'Shell: 100% brushed cotton jacquard, 320 g. Lining: cupro. Ribbing: cotton–elastane. Zip: matte zinc, two-way.',
       care: 'Wash cold, inside out, gentle cycle. Dry flat away from direct sun. Warm iron on reverse. Do not tumble dry.',
       lowSizes: ['S'],
-      tag: { rack: [0.51, 0.135], model: [0.545, 0.245] },
     },
   ];
   const N = PRODUCTS.length;
   const SIZES = ['S', 'M', 'L', 'XL'];
-  const KINDS = ['rack', 'front', 'back'];
-  const src = (p, kind) => kind === 'rack' ? `assets/img/rack-${p.id}.jpg` : `assets/img/model-${p.id}-${kind}.jpg`;
+  const FRAMES = 40;                                   // frames per 360° sequence
+  const VIEWS = ['rack', 'model'];
+  const seqSrc = (p, v, i) => `assets/seq/${p.id}-${v}/${String(i).padStart(2, '0')}.jpg`;
+  const stillSrc = (p, v) => v === 'rack' ? `assets/img/rack-${p.id}.jpg` : `assets/img/model-${p.id}-front.jpg`;
   const money = (n) => `$${n.toFixed(2)}`;
   const pad = (n) => String(n).padStart(2, '0');
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-  const lerp = (a, b, k) => a + (b - a) * k;
+  const wrap01 = (v) => ((v % 1) + 1) % 1;
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
 
   /* ---------- DOM ---------- */
   const $ = (id) => document.getElementById(id);
   const el = {
     loader: $('loader'), loaderBar: $('loaderBar'),
-    scene: $('scene'), layers: $('layers'), tag: $('tag'), tagNum: $('tagNum'), tagName: $('tagName'),
-    scrub: $('scrub'), scrubHint: $('scrubHint'), scrubTrack: $('scrubTrack'), scrubFill: $('scrubFill'),
-    scrubTicks: $('scrubTicks'), scrubHandle: $('scrubHandle'),
+    scene: $('scene'), inner: $('sceneInner'), canvas: $('canvas'),
+    switcher: $('switcher'), swPrev: $('swPrev'), swNext: $('swNext'), swNum: $('swNum'),
+    scrubHint: $('scrubHint'), scrubTrack: $('scrubTrack'), scrubFill: $('scrubFill'), scrubHandle: $('scrubHandle'),
     card: $('card'), cardIndex: $('cardIndex'), cardName: $('cardName'), cardPrice: $('cardPrice'),
     cardRef: $('cardRef'), cardSwatches: $('cardSwatches'), cardTagline: $('cardTagline'), sizes: $('sizes'),
     accComposition: $('accComposition'), accCare: $('accCare'),
@@ -61,80 +65,155 @@
     detailsTrigger: $('detailsTrigger'), sheet: $('sheet'), closeSheet: $('closeSheet'), sheetIndex: $('sheetIndex'),
     sheetName: $('sheetName'), sheetTagline: $('sheetTagline'), sheetAcc: $('sheetAcc'),
   };
+  const ctx = el.canvas.getContext('2d', { alpha: false });
 
   /* ---------- State ---------- */
   const S = {
-    view: 'rack',            // 'rack' | 'model'
-    index: 0,                // current product
-    t: 0, tTarget: 0,        // scrub position 0..1
+    view: 'rack', index: 0,
+    angle: 0,                 // 0..1 = one full turn
+    vel: 0,                   // turns per ms (inertia after release)
     dragging: false,
-    size: 'M',
-    bag: [],
-    ready: false,
-    intro: 1,                // 1 → 0 settle-in scale
+    size: 'M', bag: [],
+    ready: false, dirty: true,
+    intro: 1,
     par: { x: 0, y: 0, tx: 0, ty: 0 },
-    tagPos: { x: -999, y: -999 },
-    wheelTimer: 0,
+    xfade: null,              // { snap, start, dur }
     openPanel: null,
+    wheelTimer: 0, lastInput: 0,
+    W: 0, H: 0, dpr: 1,
   };
 
-  /* ---------- Layers ---------- */
-  const layers = new Map(); // key -> {el, cur, desired, tx, sc}
-  PRODUCTS.forEach((p) => KINDS.forEach((k) => {
-    const img = document.createElement('img');
-    img.alt = k === 'rack' ? `${p.name} jacket on the rack` : `${p.name} jacket worn, ${k} view`;
-    img.decoding = 'async';
-    img.draggable = false;
-    img.dataset.key = `${p.id}:${k}`;
-    el.layers.appendChild(img);
-    layers.set(`${p.id}:${k}`, { el: img, cur: 0, desired: 0, tx: 0, sc: 1, p, k });
-  }));
-  const L = (p, k) => layers.get(`${p.id}:${k}`);
+  /* ---------- Sequences ---------- */
+  // Progressive load order: coarse rotation first, then refine.
+  const ORDER = (() => {
+    const out = []; const seen = new Set();
+    for (let step = FRAMES; step >= 1; step = Math.floor(step / 2)) {
+      for (let i = 0; i < FRAMES; i += step) if (!seen.has(i)) { seen.add(i); out.push(i); }
+    }
+    for (let i = 0; i < FRAMES; i++) if (!seen.has(i)) out.push(i);
+    return out;
+  })();
 
-  function loadImage(img, url) {
-    return new Promise((res) => {
-      img.onload = () => res(true);
-      img.onerror = () => res(false);
-      img.src = url;
-    });
+  class Seq {
+    constructor(p, v) { this.p = p; this.v = v; this.imgs = new Array(FRAMES).fill(null); this.loaded = 0; this.started = false; this.done = false; this.still = null; }
+    load(onProgress) {
+      if (this.started) return this.promise;
+      this.started = true;
+      this.promise = new Promise((resolve) => {
+        let settled = 0;
+        const finish = () => { settled += 1; if (settled === FRAMES) { this.done = true; resolve(); } };
+        ORDER.forEach((i, k) => {
+          const im = new Image(); im.decoding = 'async';
+          im.onload = () => { this.imgs[i] = im; this.loaded += 1; S.dirty = true; onProgress && onProgress(this.loaded / FRAMES); finish(); };
+          im.onerror = finish;
+          // stagger slightly so the first coarse frames win the connection race
+          setTimeout(() => { im.src = seqSrc(this.p, this.v, i); }, Math.min(k, 12) * 8);
+        });
+      });
+      return this.promise;
+    }
+    loadStill() {
+      if (this.still !== null) return;
+      this.still = false;
+      const im = new Image(); im.decoding = 'async';
+      im.onload = () => { this.still = im; S.dirty = true; };
+      im.src = stillSrc(this.p, this.v);
+    }
+    nearest(i) {
+      if (this.imgs[i]) return this.imgs[i];
+      for (let d = 1; d < FRAMES; d++) {
+        const b = this.imgs[(i - d + FRAMES) % FRAMES]; if (b) return b;
+        const a = this.imgs[(i + d) % FRAMES]; if (a) return a;
+      }
+      return this.still || null;
+    }
+  }
+  const seqs = new Map();
+  PRODUCTS.forEach((p) => VIEWS.forEach((v) => seqs.set(`${p.id}:${v}`, new Seq(p, v))));
+  const seqOf = (i, v) => seqs.get(`${PRODUCTS[i].id}:${v}`);
+
+  // Background queue: current rack → other racks → current model → other models
+  async function loadQueue() {
+    const order = [];
+    for (let k = 0; k < N; k++) order.push(seqOf((S.index + k) % N, 'rack'));
+    for (let k = 0; k < N; k++) order.push(seqOf((S.index + k) % N, 'model'));
+    for (const s of order) { if (!s.done) await s.load(); }
   }
 
-  /* ---------- Keys / snapping ---------- */
-  const keys = () => S.view === 'rack' ? PRODUCTS.map((_, i) => i / (N - 1)) : [0, 1];
-  const nearestKey = (t) => keys().reduce((a, b) => Math.abs(b - t) < Math.abs(a - t) ? b : a);
+  /* ---------- Canvas ---------- */
+  function resize() {
+    S.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    S.W = Math.round(el.scene.clientWidth * S.dpr);
+    S.H = Math.round(el.scene.clientHeight * S.dpr);
+    if (el.canvas.width !== S.W || el.canvas.height !== S.H) { el.canvas.width = S.W; el.canvas.height = S.H; }
+    S.dirty = true;
+  }
 
-  function snap(vx = 0) {
-    const ks = keys();
-    let target = nearestKey(S.tTarget);
-    if (Math.abs(vx) > 0.6) {               // flick → next key in flick direction
-      const dir = vx < 0 ? 1 : -1;
-      const next = ks.find((k) => dir > 0 ? k > S.tTarget + 0.02 : false) ??
-                   (dir < 0 ? [...ks].reverse().find((k) => k < S.tTarget - 0.02) : undefined);
-      if (next !== undefined) target = next;
+  function cover(img, alpha) {
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    const s = Math.max(S.W / iw, S.H / ih);
+    const dw = iw * s, dh = ih * s;
+    const mob = isMobile();
+    const px = mob ? 0.40 : 0.44, py = mob ? 0.50 : 0.42;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, (S.W - dw) * px, (S.H - dh) * py, dw, dh);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawState(index, view, angle) {
+    const seq = seqOf(index, view);
+    const f = wrap01(angle) * FRAMES;
+    const i0 = Math.floor(f) % FRAMES, i1 = (i0 + 1) % FRAMES, frac = f - Math.floor(f);
+    const a = seq.nearest(i0), b = seq.imgs[i1];
+    if (!a) { ctx.fillStyle = '#cbc6bd'; ctx.fillRect(0, 0, S.W, S.H); return; }
+    cover(a, 1);
+    if (b && b !== a && frac > 0.02 && seq.imgs[i0]) cover(b, frac);
+  }
+
+  function snapshot() {
+    const c = document.createElement('canvas'); c.width = S.W; c.height = S.H;
+    c.getContext('2d').drawImage(el.canvas, 0, 0);
+    return c;
+  }
+
+  function beginCrossfade(dur) {
+    if (reduceMotion) return;
+    S.xfade = { snap: snapshot(), start: performance.now(), dur };
+    S.dirty = true;
+  }
+
+  function render(now) {
+    drawState(S.index, S.view, S.angle);
+    if (S.xfade) {
+      const p = clamp((now - S.xfade.start) / S.xfade.dur, 0, 1);
+      ctx.globalAlpha = 1 - easeOut(p);
+      ctx.drawImage(S.xfade.snap, 0, 0);
+      ctx.globalAlpha = 1;
+      if (p >= 1) S.xfade = null;
     }
-    S.tTarget = clamp(target, 0, 1);
   }
 
   /* ---------- Product / view ---------- */
-  function setIndex(i, { jump = false } = {}) {
+  function setIndex(i) {
     i = (i + N) % N;
-    if (S.view === 'rack') {
-      const adjacent = Math.abs(i - S.index) === 1;
-      S.tTarget = i / (N - 1);
-      if (jump || !adjacent) S.t = S.tTarget;   // non-adjacent: crossfade instead of scrubbing through
-    }
-    if (i !== S.index) { S.index = i; updateCard(); }
+    if (i === S.index) return;
+    beginCrossfade(260);
+    S.index = i; S.angle = 0; S.vel = 0;
+    seqOf(i, S.view).load();
+    updateCard();
+    S.dirty = true;
   }
 
   function setView(v) {
     if (v === S.view) return;
-    S.view = v;
-    S.t = S.tTarget = v === 'rack' ? S.index / (N - 1) : 0;
+    beginCrossfade(380);
+    S.view = v; S.angle = 0; S.vel = 0;
+    seqOf(S.index, v).load();
     document.body.classList.toggle('view-model', v === 'model');
     el.viewToggleLabel.textContent = v === 'model' ? 'On model' : 'On rack';
-    el.scrubHint.textContent = v === 'model' ? 'Drag to turn' : 'Drag to explore';
+    el.scrubHint.textContent = v === 'model' ? 'Drag to turn' : 'Drag to rotate';
     el.scrubHint.classList.remove('is-hidden');
-    renderTicks();
+    S.dirty = true;
   }
   const toggleView = () => setView(S.view === 'rack' ? 'model' : 'rack');
 
@@ -143,98 +222,40 @@
   function frame(now) {
     const dt = Math.min(50, now - last); last = now;
 
-    // Scrub easing
-    if (!S.dragging) {
-      const k = 1 - Math.exp(-dt / (reduceMotion ? 1 : 170));
-      S.t = Math.abs(S.tTarget - S.t) < 0.0005 ? S.tTarget : lerp(S.t, S.tTarget, k);
+    // Inertia after release
+    if (!S.dragging && Math.abs(S.vel) > 1e-6) {
+      S.angle = wrap01(S.angle + S.vel * dt);
+      S.vel *= Math.exp(-dt / 320);
+      if (Math.abs(S.vel) < 2e-6) S.vel = 0;
+      S.dirty = true;
+    } else if (!S.dragging && now - S.lastInput > 140) {
+      // At rest: settle onto the nearest exact frame so the still image is crisp
+      const target = Math.round(S.angle * FRAMES) / FRAMES;
+      let diff = target - S.angle;
+      if (diff > 0.5) diff -= 1; if (diff < -0.5) diff += 1;
+      if (Math.abs(diff) > 0.0004) { S.angle = wrap01(S.angle + diff * (1 - Math.exp(-dt / 110))); S.dirty = true; }
+      else if (diff !== 0) { S.angle = wrap01(target); S.dirty = true; }
     }
 
-    // Derive product from scrub position in rack view
-    if (S.view === 'rack') {
-      const i = Math.round(S.t * (N - 1));
-      if (i !== S.index) { S.index = i; updateCard(); }
-    }
-
-    // Desired weights per layer
-    layers.forEach((l) => { l.desired = 0; l.tx = 0; l.sc = 1; });
-    if (S.view === 'rack') {
-      const p = S.t * (N - 1);
-      PRODUCTS.forEach((pr, i) => {
-        const l = L(pr, 'rack');
-        l.desired = clamp(1 - Math.abs(p - i), 0, 1);
-        l.tx = -(p - i) * 3.2;                // slide along the rail
-      });
-    } else {
-      const pr = PRODUCTS[S.index];
-      const f = L(pr, 'front'), b = L(pr, 'back');
-      f.desired = 1 - S.t; b.desired = S.t;
-      f.tx = -S.t * 2.2; b.tx = (1 - S.t) * 2.2;
-      const bulge = 1 + Math.sin(Math.PI * S.t) * 0.025;   // a hint of depth mid-turn
-      f.sc = bulge; b.sc = bulge;
-    }
-
-    // Compositing: incoming on top; outgoing layers hold until incoming is opaque
-    const list = [...layers.values()];
-    const incoming = list.reduce((a, b) => (b.desired > a.desired ? b : a), list[0]);
-    const incomingOpaque = incoming.cur >= 0.985 || incoming.desired < 0.001;
-    const tau = S.dragging ? 110 : 240;
-    const k = reduceMotion ? 1 : 1 - Math.exp(-dt / tau);
-    list.sort((a, b) => a.desired - b.desired).forEach((l, z) => {
-      let target = l.desired;
-      if (l === incoming) target = l.desired;
-      else if (l.desired < l.cur && !incomingOpaque) target = l.cur;   // hold
-      else if (l.desired < l.cur && incomingOpaque) target = 0;
-      l.cur = Math.abs(target - l.cur) < 0.002 ? target : lerp(l.cur, target, k);
-      const vis = l.cur > 0.002;
-      l.el.style.opacity = vis ? l.cur.toFixed(3) : '0';
-      l.el.style.zIndex = String(z + 1);
-      l.el.style.transform = vis ? `translate3d(${l.tx.toFixed(3)}%,0,0) scale(${l.sc.toFixed(4)})` : '';
-    });
-
-    // Parallax + intro settle
-    if (S.intro > 0) S.intro = Math.max(0, S.intro - dt / 1900);
-    const ease = 1 - Math.pow(1 - (1 - S.intro), 3);
+    // Parallax + intro settle (CSS transform on the canvas wrapper)
+    if (S.intro > 0) { S.intro = Math.max(0, S.intro - dt / 1900); S.dirty = true; }
     const pk = 1 - Math.exp(-dt / 400);
-    S.par.x = lerp(S.par.x, S.par.tx, pk); S.par.y = lerp(S.par.y, S.par.ty, pk);
-    const scale = 1 + (1 - ease) * 0.045;
-    el.layers.style.transform = `translate3d(${S.par.x.toFixed(2)}px, ${S.par.y.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`;
+    const nx = S.par.x + (S.par.tx - S.par.x) * pk, ny = S.par.y + (S.par.ty - S.par.y) * pk;
+    if (Math.abs(nx - S.par.x) > 0.01 || Math.abs(ny - S.par.y) > 0.01 || S.intro > 0) {
+      S.par.x = nx; S.par.y = ny;
+      const scale = 1.03 + (1 - easeOut(1 - S.intro)) * 0.04;
+      el.inner.style.transform = `translate3d(${S.par.x.toFixed(2)}px, ${S.par.y.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`;
+    }
 
-    // Scrub UI
-    const pct = (S.t * 100).toFixed(2) + '%';
-    el.scrubFill.style.width = pct;
-    el.scrubHandle.style.left = pct;
-    el.scrubTrack.setAttribute('aria-valuenow', String(Math.round(S.t * 100)));
-
-    // Tag follows the hanger / shoulder
-    updateTag(dt);
-
+    if (S.dirty || S.xfade) {
+      render(now);
+      S.dirty = !!S.xfade;
+      const pct = (wrap01(S.angle) * 100).toFixed(2) + '%';
+      el.scrubFill.style.width = pct;
+      el.scrubHandle.style.left = pct;
+      el.scrubTrack.setAttribute('aria-valuenow', String(Math.round(wrap01(S.angle) * 360)));
+    }
     requestAnimationFrame(frame);
-  }
-
-  /* ---------- Tag positioning (object-fit: cover math) ---------- */
-  function imagePointToScreen(u, v) {
-    const any = L(PRODUCTS[0], 'rack').el;
-    const iw = any.naturalWidth || 2048, ih = any.naturalHeight || 1360;
-    const r = el.layers.getBoundingClientRect();
-    const cs = getComputedStyle(any).objectPosition.split(' ');
-    const px = parseFloat(cs[0]) / 100, py = parseFloat(cs[1] || '50%') / 100;
-    const s = Math.max(r.width / iw, r.height / ih);
-    const dw = iw * s, dh = ih * s;
-    const ox = (r.width - dw) * px, oy = (r.height - dh) * py;
-    return { x: r.left + ox + u * dw, y: r.top + oy + v * dh };
-  }
-
-  function updateTag(dt) {
-    const pr = PRODUCTS[S.index];
-    const [u, v] = pr.tag[S.view === 'rack' ? 'rack' : 'model'];
-    const pt = imagePointToScreen(u, v);
-    const minY = 84, maxY = window.innerHeight - 120;
-    const minX = 90, maxX = window.innerWidth - 90;
-    const tx = clamp(pt.x, minX, maxX), ty = clamp(pt.y, minY, maxY);
-    if (S.tagPos.x < -500) { S.tagPos.x = tx; S.tagPos.y = ty; }
-    const k = reduceMotion ? 1 : 1 - Math.exp(-dt / 160);
-    S.tagPos.x = lerp(S.tagPos.x, tx, k); S.tagPos.y = lerp(S.tagPos.y, ty, k);
-    el.tag.style.transform = `translate3d(${S.tagPos.x.toFixed(1)}px, ${S.tagPos.y.toFixed(1)}px, 0) translate(-50%, -50%)`;
   }
 
   /* ---------- Card ---------- */
@@ -251,10 +272,9 @@
     swapText(el.cardRef, p.ref);
     swapText(el.cardTagline, p.tagline);
     swapText(el.cardIndex, `${pad(S.index + 1)} / ${pad(N)}`);
+    swapText(el.swNum, pad(S.index + 1));
     el.accComposition.textContent = p.composition;
     el.accCare.textContent = p.care;
-    el.tagNum.textContent = pad(S.index + 1);
-    swapText(el.tagName, p.name);
     [...el.cardSwatches.children].forEach((b, i) => b.classList.toggle('is-active', i === S.index));
     [...el.sizes.children].forEach((b) => b.classList.toggle('is-low', p.lowSizes.includes(b.dataset.size)));
     [...el.collectionGrid.children].forEach((t, i) => t.classList.toggle('is-active', i === S.index));
@@ -262,7 +282,7 @@
   }
 
   function buildCard() {
-    [el.cardName, el.cardPrice, el.cardRef, el.cardTagline, el.cardIndex, el.tagName].forEach((n) => n.classList.add('text-swap'));
+    [el.cardName, el.cardPrice, el.cardRef, el.cardTagline, el.cardIndex, el.swNum].forEach((n) => n.classList.add('text-swap'));
     PRODUCTS.forEach((p, i) => {
       const b = document.createElement('button');
       b.type = 'button'; b.style.background = p.swatch; b.title = p.name; b.setAttribute('aria-label', p.name);
@@ -281,20 +301,16 @@
     });
   }
 
-  function renderTicks() {
-    el.scrubTicks.innerHTML = keys().map((k) => `<i style="left:${k * 100}%"></i>`).join('');
-  }
-
   /* ---------- Collection ---------- */
   function buildCollection() {
     PRODUCTS.forEach((p, i) => {
       const t = document.createElement('button');
       t.type = 'button'; t.className = 'tile';
       t.innerHTML = `
-        <div class="tile__img"><img src="${src(p, 'rack')}" alt="${p.name}" loading="lazy" style="object-position:40% 50%"><span class="tile__num">${pad(i + 1)}</span></div>
+        <div class="tile__img"><img src="${stillSrc(p, 'rack')}" alt="${p.name}" loading="lazy" style="object-position:40% 50%"><span class="tile__num">${pad(i + 1)}</span></div>
         <div class="tile__row"><span class="tile__name">${p.name}</span><span class="tile__price">${money(p.price)}</span></div>
         <div class="tile__desc">${p.tagline}</div>`;
-      t.addEventListener('click', () => { setView('rack'); setIndex(i, { jump: true }); closePanels(); });
+      t.addEventListener('click', () => { setView('rack'); setIndex(i); closePanels(); });
       el.collectionGrid.appendChild(t);
     });
   }
@@ -326,7 +342,7 @@
       subtotal += p.price * it.qty;
       return `
         <div class="bag-item" data-idx="${idx}">
-          <div class="bag-item__img"><img src="${src(p, 'rack')}" alt="" style="object-position:38% 28%"></div>
+          <div class="bag-item__img"><img src="${stillSrc(p, 'rack')}" alt="" style="object-position:38% 28%"></div>
           <div>
             <div class="bag-item__name">${p.name}</div>
             <div class="bag-item__meta">Size ${it.size} · ${p.ref}</div>
@@ -390,88 +406,79 @@
     toastTimer = setTimeout(() => el.toast.classList.remove('is-on'), 2200);
   }
 
-  /* ---------- Input: drag on scene ---------- */
+  /* ---------- Input: drag on the scene (rotate) ---------- */
   function hideHint() { el.scrubHint.classList.add('is-hidden'); }
 
   (function sceneDrag() {
-    let startX = 0, startT = 0, lastX = 0, lastTime = 0, vx = 0, moved = false;
-    const span = () => window.innerWidth * (S.view === 'rack' ? 0.9 : 0.62);
+    let startX = 0, startAngle = 0, lastX = 0, lastT = 0, v = 0, moved = false;
+    const turnPx = () => Math.max(420, window.innerWidth * 0.85);   // px for one full turn
     el.scene.addEventListener('pointerdown', (e) => {
       if (S.openPanel || !S.ready) return;
       if (e.button !== undefined && e.button !== 0) return;
-      S.dragging = true; moved = false;
+      S.dragging = true; moved = false; S.vel = 0;
       el.scene.classList.add('is-dragging');
-      startX = lastX = e.clientX; startT = S.t; lastTime = performance.now(); vx = 0;
-      try { el.scene.setPointerCapture(e.pointerId); } catch (_) { /* synthetic pointer */ }
+      startX = lastX = e.clientX; startAngle = S.angle; lastT = performance.now(); v = 0;
+      try { el.scene.setPointerCapture(e.pointerId); } catch (_) { /* synthetic */ }
     });
     el.scene.addEventListener('pointermove', (e) => {
       if (!S.dragging) return;
       const now = performance.now();
       const dx = e.clientX - startX;
       if (Math.abs(dx) > 3) moved = true;
-      S.t = clamp(startT - dx / span(), 0, 1);
-      S.tTarget = S.t;
-      const dtm = Math.max(1, now - lastTime);
-      vx = lerp(vx, (e.clientX - lastX) / dtm, 0.5);     // px per ms
-      lastX = e.clientX; lastTime = now;
-      S.par.tx = clamp(S.par.tx + (e.movementX || 0) * 0.02, -8, 8);
+      S.angle = wrap01(startAngle - dx / turnPx()); S.lastInput = now;
+      const dtm = Math.max(1, now - lastT);
+      v = v * 0.5 + (-(e.clientX - lastX) / turnPx() / dtm) * 0.5;   // turns per ms
+      lastX = e.clientX; lastT = now;
+      S.par.tx = clamp(S.par.tx + (e.movementX || 0) * 0.015, -8, 8);
+      S.dirty = true;
     });
     const end = () => {
       if (!S.dragging) return;
       S.dragging = false;
       el.scene.classList.remove('is-dragging');
-      if (moved) { hideHint(); snap(vx); }
+      if (moved) { hideHint(); if (performance.now() - lastT < 80) S.vel = clamp(v, -0.004, 0.004) * 0.7; }
     };
     el.scene.addEventListener('pointerup', end);
     el.scene.addEventListener('pointercancel', end);
     el.scene.addEventListener('lostpointercapture', end);
   })();
 
-  /* ---------- Input: scrub track ---------- */
+  /* ---------- Input: slider ---------- */
   (function scrubDrag() {
+    let on = false;
     const setFromX = (x) => {
       const r = el.scrubTrack.getBoundingClientRect();
-      S.t = S.tTarget = clamp((x - r.left) / r.width, 0, 1);
+      S.angle = clamp((x - r.left) / r.width, 0, 0.9999); S.vel = 0; S.dirty = true; S.lastInput = performance.now();
     };
     el.scrubTrack.addEventListener('pointerdown', (e) => {
-      S.dragging = true; setFromX(e.clientX); hideHint();
-      try { el.scrubTrack.setPointerCapture(e.pointerId); } catch (_) { /* synthetic pointer */ }
+      on = true; setFromX(e.clientX); hideHint();
+      try { el.scrubTrack.setPointerCapture(e.pointerId); } catch (_) { /* synthetic */ }
     });
-    el.scrubTrack.addEventListener('pointermove', (e) => { if (S.dragging) setFromX(e.clientX); });
-    const end = () => { if (!S.dragging) return; S.dragging = false; snap(0); };
+    el.scrubTrack.addEventListener('pointermove', (e) => { if (on) setFromX(e.clientX); });
+    const end = () => { on = false; };
     el.scrubTrack.addEventListener('pointerup', end);
     el.scrubTrack.addEventListener('pointercancel', end);
     el.scrubTrack.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight') { e.preventDefault(); stepKey(1); }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); stepKey(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); S.angle = wrap01(S.angle + 1 / FRAMES); S.dirty = true; hideHint(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); S.angle = wrap01(S.angle - 1 / FRAMES); S.dirty = true; hideHint(); }
     });
   })();
 
-  function stepKey(dir) {
-    const ks = keys();
-    const cur = nearestKey(S.tTarget);
-    const i = ks.indexOf(cur);
-    const next = ks[clamp(i + dir, 0, ks.length - 1)];
-    S.tTarget = next;
-    hideHint();
-  }
-
-  /* ---------- Input: wheel / trackpad ---------- */
+  /* ---------- Input: wheel / trackpad (rotate) ---------- */
   window.addEventListener('wheel', (e) => {
     if (S.openPanel || !S.ready || S.dragging) return;
-    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    S.tTarget = clamp(S.tTarget + d * 0.0007, 0, 1);
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+    const d = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * unit;
+    S.angle = wrap01(S.angle + d * 0.00045); S.vel = 0; S.dirty = true; S.lastInput = performance.now();
     hideHint();
-    clearTimeout(S.wheelTimer);
-    S.wheelTimer = setTimeout(() => snap(0), 160);
   }, { passive: true });
 
   /* ---------- Input: keyboard ---------- */
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closePanels(); return; }
     if (S.openPanel || e.target.closest('input, textarea')) return;
-    if (e.key === 'ArrowRight') { S.view === 'rack' ? setIndex(S.index + 1) : (S.tTarget = 1); hideHint(); }
-    if (e.key === 'ArrowLeft') { S.view === 'rack' ? setIndex(S.index - 1) : (S.tTarget = 0); hideHint(); }
+    if (e.key === 'ArrowRight') { setIndex(S.index + 1); hideHint(); }
+    if (e.key === 'ArrowLeft') { setIndex(S.index - 1); hideHint(); }
     if (e.key.toLowerCase() === 'm') toggleView();
     if (e.key.toLowerCase() === 'b') openPanel('bag');
   });
@@ -480,17 +487,18 @@
   if (window.matchMedia('(pointer: fine)').matches && !reduceMotion) {
     window.addEventListener('mousemove', (e) => {
       if (S.dragging) return;
-      S.par.tx = (e.clientX / window.innerWidth - 0.5) * 16;
-      S.par.ty = (e.clientY / window.innerHeight - 0.5) * 9;
+      S.par.tx = (e.clientX / window.innerWidth - 0.5) * 14;
+      S.par.ty = (e.clientY / window.innerHeight - 0.5) * 8;
     }, { passive: true });
   }
 
   /* ---------- Wiring ---------- */
   el.prevBtn.addEventListener('click', () => setIndex(S.index - 1));
   el.nextBtn.addEventListener('click', () => setIndex(S.index + 1));
+  el.swPrev.addEventListener('click', () => setIndex(S.index - 1));
+  el.swNext.addEventListener('click', () => setIndex(S.index + 1));
   el.viewToggle.addEventListener('click', toggleView);
   el.viewToggleTop.addEventListener('click', toggleView);
-  el.tag.addEventListener('click', toggleView);
   el.addToBag.addEventListener('click', addToBag);
   el.sizeGuide.addEventListener('click', () => toast(`${PRODUCTS[S.index].name} runs true to size. Model is 6′1″ and wears M.`));
   el.openCollection.addEventListener('click', () => openPanel('collection'));
@@ -501,9 +509,9 @@
   el.closeSheet.addEventListener('click', () => closePanels());
   el.scrim.addEventListener('click', () => closePanels());
   el.checkout.addEventListener('click', () => toast('Checkout is not connected in this preview.'));
-  el.brandLink.addEventListener('click', (e) => { e.preventDefault(); closePanels(); setView('rack'); setIndex(0, { jump: true }); });
+  el.brandLink.addEventListener('click', (e) => { e.preventDefault(); closePanels(); setView('rack'); setIndex(0); });
+  window.addEventListener('resize', resize);
 
-  // Swipe-down closes the mobile sheet
   (function sheetSwipe() {
     let y0 = null;
     el.sheet.addEventListener('touchstart', (e) => { y0 = e.touches[0].clientY; }, { passive: true });
@@ -515,22 +523,20 @@
 
   /* ---------- Boot ---------- */
   async function boot() {
-    buildCard(); buildCollection(); renderTicks(); renderBag(); updateCard();
-    L(PRODUCTS[0], 'rack').cur = 0;
+    buildCard(); buildCollection(); renderBag(); updateCard();
+    resize();
+    seqs.forEach((s) => s.loadStill());
 
-    // Priority: the three rack shots, then the on-model views in the background
-    const first = PRODUCTS.map((p) => L(p, 'rack'));
-    let done = 0;
-    const tick = () => { done += 1; el.loaderBar.style.width = `${Math.round((done / first.length) * 100)}%`; };
-    await Promise.all(first.map((l) => loadImage(l.el, src(l.p, 'rack')).then(tick)));
-
+    const first = seqOf(0, 'rack');
     requestAnimationFrame(frame);
-    S.ready = true;
+    await first.load((p) => { el.loaderBar.style.width = `${Math.round(p * 100)}%`; });
+
+    S.ready = true; S.dirty = true;
     document.body.classList.add('is-ready');
     el.loader.classList.add('is-done');
-    setTimeout(() => el.tag.classList.add('is-visible'), 700);
+    setTimeout(() => el.switcher.classList.add('is-visible'), 600);
 
-    PRODUCTS.forEach((p) => ['front', 'back'].forEach((k) => loadImage(L(p, k).el, src(p, k))));
+    loadQueue();
   }
 
   boot();

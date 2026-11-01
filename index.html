@@ -23,18 +23,24 @@
 
   <!-- Stage: the immersive scene -->
   <main class="stage" id="stage">
-    <div class="scene" id="scene" aria-label="Interactive product scene">
-      <div class="scene__layers" id="layers"></div>
+    <div class="scene" id="scene" aria-label="Interactive product scene — drag to rotate">
+      <div class="scene__inner" id="sceneInner">
+        <canvas class="scene__canvas" id="canvas" aria-hidden="true"></canvas>
+      </div>
       <div class="scene__vignette"></div>
       <div class="scene__grain"></div>
     </div>
 
-    <!-- Floating tag anchored to the hanger -->
-    <button class="tag" id="tag" type="button" aria-label="Product tag">
-      <span class="tag__dot"></span>
-      <span class="tag__num" id="tagNum">01</span>
-      <span class="tag__name" id="tagName">Céleste</span>
-    </button>
+    <!-- Product switcher pill (‹ 01 ›) -->
+    <div class="switcher" id="switcher" role="group" aria-label="Switch jacket">
+      <button class="switcher__btn" id="swPrev" type="button" aria-label="Previous jacket">
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="switcher__mid"><i class="switcher__dot"></i><span id="swNum">01</span></span>
+      <button class="switcher__btn" id="swNext" type="button" aria-label="Next jacket">
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
 
     <!-- HUD -->
     <header class="hud hud--top">
@@ -62,10 +68,9 @@
 
     <!-- Scrubber -->
     <div class="scrub" id="scrub">
-      <div class="scrub__hint" id="scrubHint">Drag to explore</div>
-      <div class="scrub__track" id="scrubTrack" role="slider" aria-label="Explore" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+      <div class="scrub__hint" id="scrubHint">Drag to rotate</div>
+      <div class="scrub__track" id="scrubTrack" role="slider" aria-label="Rotation" aria-valuemin="0" aria-valuemax="360" aria-valuenow="0" tabindex="0">
         <div class="scrub__fill" id="scrubFill"></div>
-        <div class="scrub__ticks" id="scrubTicks"></div>
         <div class="scrub__handle" id="scrubHandle"></div>
       </div>
     </div>
