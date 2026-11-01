@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CIEL — Outerwear, Édition 01</title>
+  <meta name="description" content="CIEL Édition 01. Three jackets, one quiet room. Explore the rack, see it on, add to bag." />
+  <meta name="theme-color" content="#c9c5bd" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f3a34'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-family='Helvetica,Arial' font-size='13' letter-spacing='1' fill='%23f3f2ee'%3EC%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- Preloader -->
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="loader__mark">C I E L</div>
+    <div class="loader__sub">Édition 01 — loading the room</div>
+    <div class="loader__bar"><span id="loaderBar"></span></div>
+  </div>
+
+  <!-- Stage: the immersive scene -->
+  <main class="stage" id="stage">
+    <div class="scene" id="scene" aria-label="Interactive product scene">
+      <div class="scene__layers" id="layers"></div>
+      <div class="scene__vignette"></div>
+      <div class="scene__grain"></div>
+    </div>
+
+    <!-- Floating tag anchored to the hanger -->
+    <button class="tag" id="tag" type="button" aria-label="Product tag">
+      <span class="tag__dot"></span>
+      <span class="tag__num" id="tagNum">01</span>
+      <span class="tag__name" id="tagName">Céleste</span>
+    </button>
+
+    <!-- HUD -->
+    <header class="hud hud--top">
+      <div class="hud__left">
+        <a class="brand" href="#" id="brandLink" aria-label="CIEL home">
+          <span class="brand__mark">C I E L</span>
+          <span class="brand__sub">Outerwear — Édition 01</span>
+        </a>
+        <button class="pill pill--ghost" id="openCollection" type="button">
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>The collection</span>
+        </button>
+      </div>
+      <div class="hud__right">
+        <button class="pill pill--view" id="viewToggleTop" type="button" aria-label="Toggle view">
+          <span class="pill__label" id="viewToggleLabel">On rack</span>
+          <span class="pill__switch"><span></span></span>
+        </button>
+        <button class="pill pill--bag" id="openBag" type="button" aria-label="Open bag">
+          <span>Bag</span>
+          <span class="badge" id="bagCount">0</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrubber -->
+    <div class="scrub" id="scrub">
+      <div class="scrub__hint" id="scrubHint">Drag to explore</div>
+      <div class="scrub__track" id="scrubTrack" role="slider" aria-label="Explore" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+        <div class="scrub__fill" id="scrubFill"></div>
+        <div class="scrub__ticks" id="scrubTicks"></div>
+        <div class="scrub__handle" id="scrubHandle"></div>
+      </div>
+    </div>
+
+    <!-- Product card -->
+    <aside class="card" id="card" aria-live="polite">
+      <div class="card__head">
+        <div class="card__eyebrow"><span>CIEL</span><span class="card__index" id="cardIndex">01 / 03</span></div>
+        <div class="card__nav">
+          <button class="details-trigger" id="detailsTrigger" type="button">Details</button>
+          <button class="iconbtn" id="prevBtn" type="button" aria-label="Previous jacket">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="iconbtn" id="nextBtn" type="button" aria-label="Next jacket">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card__title">
+        <h1 class="card__name" id="cardName">Céleste</h1>
+        <div class="card__price" id="cardPrice">$179.00</div>
+      </div>
+      <div class="card__meta">
+        <span class="card__ref" id="cardRef">Ref. 0912-CEL</span>
+        <span class="card__swatches" id="cardSwatches"></span>
+      </div>
+      <p class="card__tag" id="cardTagline">Moon and fern, raised in tonal thread.</p>
+
+      <div class="sizes" role="radiogroup" aria-label="Size">
+        <span class="sizes__label">Size</span>
+        <div class="sizes__list" id="sizes"></div>
+        <button class="sizes__guide" id="sizeGuide" type="button">Guide</button>
+      </div>
+
+      <div class="acc" id="acc">
+        <details class="acc__item">
+          <summary>Composition <span class="acc__plus"></span></summary>
+          <div class="acc__body" id="accComposition"></div>
+        </details>
+        <details class="acc__item">
+          <summary>Care <span class="acc__plus"></span></summary>
+          <div class="acc__body" id="accCare"></div>
+        </details>
+        <details class="acc__item">
+          <summary>Shipping &amp; returns <span class="acc__plus"></span></summary>
+          <div class="acc__body">Complimentary shipping on every order. Dispatched within two business days from our Lisbon atelier. Returns within 30 days, unworn, tags on.</div>
+        </details>
+      </div>
+
+      <p class="card__note" id="cardNote">Made in small runs. Ships in two business days.</p>
+
+      <div class="card__actions">
+        <button class="btn btn--ghost" id="viewToggle" type="button">
+          <span class="btn__swap">
+            <span>See it on</span>
+            <span>Back to the rack</span>
+          </span>
+        </button>
+        <button class="btn btn--primary" id="addToBag" type="button">
+          <span>Add to bag</span>
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M4.5 7.5h11l-.8 9.2a1 1 0 0 1-1 .8H6.3a1 1 0 0 1-1-.8L4.5 7.5Z M7 7.5V6a3 3 0 0 1 6 0v1.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- Collection overlay -->
+  <section class="overlay collection" id="collection" aria-hidden="true">
+    <div class="overlay__bar">
+      <div class="overlay__title">The collection <span>— Édition 01</span></div>
+      <button class="iconbtn iconbtn--lg" id="closeCollection" type="button" aria-label="Close">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <p class="collection__intro">Three jackets, one cut. Brushed cotton with a tonal jacquard of moons and fern. Cut for the hour the light goes soft.</p>
+    <div class="collection__grid" id="collectionGrid"></div>
+    <footer class="collection__foot">
+      <span>CIEL — Lisbon, Portugal</span>
+      <span>hello@ciel.studio</span>
+    </footer>
+  </section>
+
+  <!-- Bag drawer -->
+  <section class="drawer" id="bag" aria-hidden="true">
+    <div class="drawer__bar">
+      <div class="overlay__title">Bag <span id="bagTitleCount">— empty</span></div>
+      <button class="iconbtn iconbtn--lg" id="closeBag" type="button" aria-label="Close bag">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="drawer__items" id="bagItems">
+      <div class="drawer__empty">Nothing here yet. Pick a size and add a jacket.</div>
+    </div>
+    <div class="drawer__foot">
+      <div class="drawer__row"><span>Subtotal</span><strong id="bagSubtotal">$0.00</strong></div>
+      <div class="drawer__row drawer__row--muted"><span>Shipping</span><span>Complimentary</span></div>
+      <button class="btn btn--primary btn--full" id="checkout" type="button"><span>Checkout</span></button>
+    </div>
+  </section>
+
+  <!-- Mobile details sheet -->
+  <section class="sheet" id="sheet" aria-hidden="true">
+    <div class="sheet__grab"></div>
+    <div class="sheet__head">
+      <div>
+        <div class="card__eyebrow"><span>CIEL</span><span id="sheetIndex">01 / 03</span></div>
+        <h2 class="sheet__name" id="sheetName">Céleste</h2>
+      </div>
+      <button class="iconbtn iconbtn--lg" id="closeSheet" type="button" aria-label="Close">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <p class="sheet__tag" id="sheetTagline"></p>
+    <div class="acc" id="sheetAcc"></div>
+  </section>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/app.js" defer></script>
+</body>
+</html>

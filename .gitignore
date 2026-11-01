@@ -1,0 +1,5 @@
+# reference footage and local-only files
+*.MP4
+*.mp4
+.DS_Store
+.claude/
