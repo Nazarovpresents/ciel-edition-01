@@ -43,6 +43,12 @@ def pick_by_curve(C):
         if out and best < out[-1]: best = out[-1]
         out.append(best)
     out[0] = 0
+    # The loop-end frame is the chosen front-facing pose: make sure the last picks actually reach
+    # it (the final approach often carries almost no measurable motion and would be skipped).
+    tail_target = END - max(1, round((END - out[-4]) / 4))     # last frame one step short of END
+    if out[-1] < tail_target:
+        out[-1] = tail_target
+        out[-2] = max(out[-2], round((out[-3] + tail_target) / 2))
     return out
 
 if MODE == 'width':
@@ -121,13 +127,7 @@ C = [0.0]
 for t in range(1, END + 1): C.append(C[-1] + ds[t])
 total = C[-1] or 1.0
 
-idx = []
-for k in range(N):
-    target = total * k / N
-    best = min(range(END + 1), key=lambda i: (abs(C[i] - target), i))
-    if idx and best < idx[-1]: best = idx[-1]
-    idx.append(best)
-idx[0] = 0
+idx = pick_by_curve(C)
 
 if DEBUG:
     sys.stderr.write(f"frames={T} end={END}\n")
