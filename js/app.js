@@ -80,7 +80,7 @@
     xfade: null,              // { snap, start, dur }
     openPanel: null,
     wheelTimer: 0, lastInput: 0,
-    W: 0, H: 0, dpr: 1,
+    W: 0, H: 0, dpr: 1, cardTop: 0,
   };
 
   /* ---------- Sequences ---------- */
@@ -145,6 +145,7 @@
     S.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     S.W = Math.round(el.scene.clientWidth * S.dpr);
     S.H = Math.round(el.scene.clientHeight * S.dpr);
+    S.cardTop = isMobile() ? el.card.getBoundingClientRect().top : el.scene.clientHeight;
     if (el.canvas.width !== S.W || el.canvas.height !== S.H) { el.canvas.width = S.W; el.canvas.height = S.H; }
     S.dirty = true;
   }
@@ -155,13 +156,31 @@
     model: { d: [0.40, 0.50], m: [0.40, 0.50] },
   };
 
+  // Rack view: plain cover. Model view: keep the whole figure visible — the frame's full height
+  // fits the free area (above the bottom card on phones, below the top HUD), and any uncovered
+  // strips are filled by stretching the frame's edge pixels (plaster wall / concrete floor).
   function cover(img, alpha, view) {
+    view = view || S.view;
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-    const s = Math.max(S.W / iw, S.H / ih);
+    const mob = isMobile();
+    const f = FOCUS[view][mob ? 'm' : 'd'];
+    let bx = 0, by = 0, bw = S.W, bh = S.H;
+    if (view === 'model' && mob) {
+      by = Math.round(64 * S.dpr);
+      bh = Math.max(Math.round(S.H * 0.45), Math.round(S.cardTop * S.dpr) - by);
+    }
+    let s = Math.max(bw / iw, bh / ih);
+    if (view === 'model') { const fit = bh / ih; if (s > fit * 1.03) s = fit; }
     const dw = iw * s, dh = ih * s;
-    const f = FOCUS[view || S.view][isMobile() ? 'm' : 'd'];
+    const dx = bx + (bw - dw) * f[0], dy = by + (bh - dh) * f[1];
     ctx.globalAlpha = alpha;
-    ctx.drawImage(img, (S.W - dw) * f[0], (S.H - dh) * f[1], dw, dh);
+    ctx.drawImage(img, dx, dy, dw, dh);
+    // edge fills
+    const e = Math.max(2, Math.round(ih * 0.004));
+    if (dy > 0) ctx.drawImage(img, 0, 0, iw, e, dx, 0, dw, dy + 1);
+    if (dy + dh < S.H) ctx.drawImage(img, 0, ih - e, iw, e, dx, dy + dh - 1, dw, S.H - (dy + dh) + 1);
+    if (dx > 0) ctx.drawImage(img, 0, 0, e, ih, 0, 0, dx + 1, S.H);
+    if (dx + dw < S.W) ctx.drawImage(img, iw - e, 0, e, ih, dx + dw - 1, 0, S.W - (dx + dw) + 1, S.H);
     ctx.globalAlpha = 1;
   }
 
