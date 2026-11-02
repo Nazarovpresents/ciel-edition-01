@@ -1,7 +1,8 @@
 # CIEL — Édition 01
 
-Immersive single-page product experience for a three-piece jacket collection,
-built from an Instagram reference video. Static HTML/CSS/JS, no build step.
+Immersive single-page product experience for a four-suit tailoring collection
+(Minuit, Tabac, Granit, Grenat), built from an Instagram reference video.
+Static HTML/CSS/JS, no build step.
 
 ## Run locally
 
@@ -32,11 +33,11 @@ Then open http://127.0.0.1:5173 — or simply open `index.html` in a browser
 - **Leave it alone for ~2.5 s** and the turntable keeps turning on its own (`IDLE_MODE`, `IDLE_DELAY`, `IDLE_TURN_MS` at the top of `js/app.js`; `IDLE_MODE = 'pingpong'` gives a boomerang instead).
 - **‹ 01 › pill, card arrows, swatches, collection tiles** switch product with a quick in-place crossfade. Keyboard: ← →.
 - **See it on** crossfades to a full-length on-model turntable (wide shot, head to shoes); drag to turn the model. `M` toggles view, `B` opens bag, `Esc` closes.
-- **Add to bag** keeps a local bag with quantities and subtotal (checkout is a stub).
+- **Add to bag** keeps a local bag with quantities and subtotal (checkout is a stub). Sizes are EU tailoring sizes 46–54.
 
 ## Editing products
 
 Products (names, prices, copy, swatch colours) live in the `PRODUCTS` array at
-the top of `js/app.js`. A new jacket needs a still `assets/img/rack-<id>.jpg`
+the top of `js/app.js`. A new suit needs a still `assets/img/rack-<id>.jpg`
 and `assets/img/model-<id>-front.jpg`, plus two sequences made with
 `tools/make_seq.sh clip.mp4 assets/seq/<id>-rack` and `… <id>-model`.

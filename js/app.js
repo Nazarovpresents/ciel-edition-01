@@ -11,29 +11,36 @@
   /* ---------- Data ---------- */
   const PRODUCTS = [
     {
-      id: 'celeste', name: 'Céleste', price: 179, ref: 'Ref. 0912-CEL', swatch: '#a8bfd5',
-      tagline: 'Moon and fern, raised in tonal thread. The sky at the blue hour.',
-      composition: 'Shell: 100% brushed cotton jacquard, 320 g. Lining: cupro. Ribbing: cotton–elastane. Zip: matte zinc, two-way.',
-      care: 'Wash cold, inside out, gentle cycle. Dry flat away from direct sun. Warm iron on reverse. Do not tumble dry.',
-      lowSizes: ['XL'],
+      id: 'minuit', name: 'Minuit', price: 890, ref: 'Ref. 2201-MIN', swatch: '#232633',
+      tagline: 'Midnight chalk-stripe, double-breasted. Peak lapels, cut close through the waist.',
+      composition: 'Shell: 100% virgin wool, Super 120s, 280 g, half-canvassed. Lining: Bemberg cupro. Buttons: natural horn.',
+      care: 'Dry clean only. Brush after wear, rest 24 hours between wears, store on a shaped hanger.',
+      lowSizes: ['54'],
     },
     {
-      id: 'sable', name: 'Sable', price: 159, ref: 'Ref. 0913-SAB', swatch: '#e7e0d2',
-      tagline: 'Sun-washed ivory with a soft, dry hand. Wears in, never out.',
-      composition: 'Shell: 100% brushed cotton jacquard, 320 g. Lining: cupro. Ribbing: cotton–elastane. Zip: matte zinc, two-way.',
-      care: 'Wash cold, inside out, gentle cycle. Dry flat away from direct sun. Warm iron on reverse. Do not tumble dry.',
+      id: 'tabac', name: 'Tabac', price: 790, ref: 'Ref. 2202-TAB', swatch: '#6a4a3b',
+      tagline: 'Tobacco-brown windowpane check. Single-breasted, two buttons, soft natural shoulder.',
+      composition: 'Shell: 100% virgin wool, Super 120s, 280 g, half-canvassed. Lining: Bemberg cupro. Buttons: natural horn.',
+      care: 'Dry clean only. Brush after wear, rest 24 hours between wears, store on a shaped hanger.',
       lowSizes: [],
     },
     {
-      id: 'ardoise', name: 'Ardoise', price: 139, ref: 'Ref. 0914-ARD', swatch: '#7e8184',
-      tagline: 'Mineral grey, cut for layered silhouettes. Quiet from any angle.',
-      composition: 'Shell: 100% brushed cotton jacquard, 320 g. Lining: cupro. Ribbing: cotton–elastane. Zip: matte zinc, two-way.',
-      care: 'Wash cold, inside out, gentle cycle. Dry flat away from direct sun. Warm iron on reverse. Do not tumble dry.',
-      lowSizes: ['S'],
+      id: 'granit', name: 'Granit', price: 760, ref: 'Ref. 2203-GRA', swatch: '#8d8f8c',
+      tagline: 'Light grey glen check. Two buttons, notch lapel, the suit for every day that counts.',
+      composition: 'Shell: 100% virgin wool, Super 120s, 280 g, half-canvassed. Lining: Bemberg cupro. Buttons: natural horn.',
+      care: 'Dry clean only. Brush after wear, rest 24 hours between wears, store on a shaped hanger.',
+      lowSizes: ['46'],
+    },
+    {
+      id: 'grenat', name: 'Grenat', price: 980, ref: 'Ref. 2204-GRE', swatch: '#5c2b3b',
+      tagline: 'Garnet dinner jacket with a black satin peak lapel. Black trousers, bow tie, after dark.',
+      composition: 'Shell: 100% virgin wool, Super 130s, 260 g, half-canvassed. Lapel: silk satin. Lining: Bemberg cupro.',
+      care: 'Dry clean only. Steam, never iron the satin. Store on a shaped hanger in a breathable bag.',
+      lowSizes: ['52'],
     },
   ];
   const N = PRODUCTS.length;
-  const SIZES = ['S', 'M', 'L', 'XL'];
+  const SIZES = ['46', '48', '50', '52', '54'];   // EU tailoring sizes
   const FRAMES = 40;                                   // frames per 360° sequence
   const VIEWS = ['rack', 'model'];
   // Two frame sets: 'std' (1440px JPEG) loads first everywhere; 'hi' (4K WebP) is layered on top
@@ -96,7 +103,7 @@
     pos: 0,                   // unbounded position in turns (angle shown = angleOf(pos))
     vel: 0,                   // turns per ms (inertia after release)
     dragging: false,
-    size: 'M', bag: [],
+    size: '50', bag: [],
     ready: false, dirty: true,
     intro: 1,
     par: { x: 0, y: 0, tx: 0, ty: 0 },
@@ -215,12 +222,11 @@
     const dx = bx + (bw - dw) * f[0], dy = by + (bh - dh) * f[1];
     ctx.globalAlpha = alpha;
     ctx.drawImage(img, dx, dy, dw, dh);
-    // edge fills
-    const e = Math.max(2, Math.round(ih * 0.004));
-    if (dy > 0) ctx.drawImage(img, 0, 0, iw, e, dx, 0, dw, dy + 1);
-    if (dy + dh < S.H) ctx.drawImage(img, 0, ih - e, iw, e, dx, dy + dh - 1, dw, S.H - (dy + dh) + 1);
-    if (dx > 0) ctx.drawImage(img, 0, 0, e, ih, 0, 0, dx + 1, S.H);
-    if (dx + dw < S.W) ctx.drawImage(img, iw - e, 0, e, ih, dx + dw - 1, 0, S.W - (dx + dw) + 1, S.H);
+    // uncovered strips: mirror the frame outwards (the rail and floor continue naturally)
+    if (dy > 0) { ctx.save(); ctx.translate(0, dy); ctx.scale(1, -1); ctx.drawImage(img, dx, 0, dw, dh); ctx.restore(); }
+    if (dy + dh < S.H) { ctx.save(); ctx.translate(0, dy + dh); ctx.scale(1, -1); ctx.drawImage(img, dx, -dh, dw, dh); ctx.restore(); }
+    if (dx > 0) { ctx.save(); ctx.translate(dx, 0); ctx.scale(-1, 1); ctx.drawImage(img, 0, dy, dw, dh); ctx.restore(); }
+    if (dx + dw < S.W) { ctx.save(); ctx.translate(dx + dw, 0); ctx.scale(-1, 1); ctx.drawImage(img, -dw, dy, dw, dh); ctx.restore(); }
     ctx.globalAlpha = 1;
   }
 
@@ -465,7 +471,7 @@
     el.sheetTagline.textContent = p.tagline;
     el.sheetAcc.innerHTML = [
       ['Composition', p.composition], ['Care', p.care],
-      ['Shipping & returns', 'Complimentary shipping on every order. Dispatched within two business days from our Lisbon atelier. Returns within 30 days, unworn, tags on.'],
+      ['Shipping & returns', 'Complimentary shipping on every order. Dispatched within five business days from our Lisbon atelier; first alterations are on us. Returns within 30 days, unworn, tags on.'],
     ].map(([h, b], i) => `<details class="acc__item"${i === 0 ? ' open' : ''}><summary>${h}<span class="acc__plus"></span></summary><div class="acc__body">${b}</div></details>`).join('');
     openPanel('sheet');
   }
@@ -595,7 +601,7 @@
   el.viewToggle.addEventListener('click', toggleView);
   el.viewToggleTop.addEventListener('click', toggleView);
   el.addToBag.addEventListener('click', addToBag);
-  el.sizeGuide.addEventListener('click', () => toast(`${PRODUCTS[S.index].name} runs true to size. Model is 6′1″ and wears M.`));
+  el.sizeGuide.addEventListener('click', () => toast(`${PRODUCTS[S.index].name} runs true to size. Model is 6′1″, chest 40″, and wears 50.`));
   el.openCollection.addEventListener('click', () => openPanel('collection'));
   el.closeCollection.addEventListener('click', () => closePanels());
   el.openBag.addEventListener('click', () => openPanel('bag'));
