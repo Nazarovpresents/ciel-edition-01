@@ -56,9 +56,17 @@ if [ "$SEAM" -gt 0 ]; then
     ffmpeg -v error -y -i "$TMP/00.png" -i "$src" -filter_complex "[0:v][1:v]blend=all_mode=normal:all_opacity=$w" "$TMP/blend.png" && mv "$TMP/blend.png" "$src"
   done
 fi
+# A gentle unsharp mask restores the micro-contrast that AI video + scaling soften, for a
+# crisper "shot on camera" look. Tune with SHARP (0 disables).
+SHARP="${SHARP:-0.7}"
+usm=""
+if awk -v s="$SHARP" 'BEGIN{exit !(s>0)}'; then usm=",unsharp=5:5:${SHARP}:3:3:0.0"; fi
 if [ "${FMT:-jpg}" = "webp" ]; then
-  for f in "$TMP"/[0-9][0-9].png; do cwebp -quiet -q "${WEBP_Q:-80}" -m 4 -sharp_yuv "$f" -o "$OUT/$(basename "${f%.png}").webp"; done
+  for f in "$TMP"/[0-9][0-9].png; do
+    [ -n "$usm" ] && ffmpeg -v error -y -i "$f" -vf "unsharp=5:5:${SHARP}:3:3:0.0" "$f.s.png" && mv "$f.s.png" "$f"
+    cwebp -quiet -q "${WEBP_Q:-90}" -m 6 -sharp_yuv "$f" -o "$OUT/$(basename "${f%.png}").webp"
+  done
 else
-  for f in "$TMP"/[0-9][0-9].png; do ffmpeg -v error -y -i "$f" -q:v 4 -pix_fmt yuvj420p "$OUT/$(basename "${f%.png}").jpg"; done
+  for f in "$TMP"/[0-9][0-9].png; do ffmpeg -v error -y -i "$f" -vf "scale=iw:ih${usm}" -q:v 2 -pix_fmt yuvj420p "$OUT/$(basename "${f%.png}").jpg"; done
 fi
 echo "wrote $(ls "$OUT" | wc -l | tr -d ' ') frames to $OUT ($(du -sh "$OUT" | cut -f1))"
