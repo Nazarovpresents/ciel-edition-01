@@ -205,7 +205,8 @@
 
   // Rack view: plain cover. Model view: keep the whole figure visible — the frame's full height
   // fits the free area (above the bottom card on phones, below the top HUD), and any uncovered
-  // strips are filled by stretching the frame's edge pixels (plaster wall / concrete floor).
+  // strips are filled by stretching the frame's EDGE pixels outwards. The frame's border is flat
+  // plaster wall / concrete floor, so a clamped edge continues it cleanly with no duplicated figure.
   function cover(img, alpha, view) {
     view = view || S.view;
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
@@ -222,11 +223,17 @@
     const dx = bx + (bw - dw) * f[0], dy = by + (bh - dh) * f[1];
     ctx.globalAlpha = alpha;
     ctx.drawImage(img, dx, dy, dw, dh);
-    // uncovered strips: mirror the frame outwards (the rail and floor continue naturally)
-    if (dy > 0) { ctx.save(); ctx.translate(0, dy); ctx.scale(1, -1); ctx.drawImage(img, dx, 0, dw, dh); ctx.restore(); }
-    if (dy + dh < S.H) { ctx.save(); ctx.translate(0, dy + dh); ctx.scale(1, -1); ctx.drawImage(img, dx, -dh, dw, dh); ctx.restore(); }
-    if (dx > 0) { ctx.save(); ctx.translate(dx, 0); ctx.scale(-1, 1); ctx.drawImage(img, 0, dy, dw, dh); ctx.restore(); }
-    if (dx + dw < S.W) { ctx.save(); ctx.translate(dx + dw, 0); ctx.scale(-1, 1); ctx.drawImage(img, -dw, dy, dw, dh); ctx.restore(); }
+    // uncovered strips: clamp-stretch a thin edge band outwards (no duplicated figure)
+    const e = 2;                                                         // source edge thickness (px)
+    if (dy > 1) ctx.drawImage(img, 0, 0, iw, e, dx, 0, dw, dy + 1);                         // top
+    if (dy + dh < S.H - 1) ctx.drawImage(img, 0, ih - e, iw, e, dx, dy + dh - 1, dw, S.H - dy - dh + 1); // bottom
+    if (dx > 1) ctx.drawImage(img, 0, 0, e, ih, 0, dy, dx + 1, dh);                         // left
+    if (dx + dw < S.W - 1) ctx.drawImage(img, iw - e, 0, e, ih, dx + dw - 1, dy, S.W - dx - dw + 1, dh); // right
+    // corners (clamp the single corner pixel)
+    if (dx > 1 && dy > 1) ctx.drawImage(img, 0, 0, e, e, 0, 0, dx + 1, dy + 1);
+    if (dx + dw < S.W - 1 && dy > 1) ctx.drawImage(img, iw - e, 0, e, e, dx + dw - 1, 0, S.W - dx - dw + 1, dy + 1);
+    if (dx > 1 && dy + dh < S.H - 1) ctx.drawImage(img, 0, ih - e, e, e, 0, dy + dh - 1, dx + 1, S.H - dy - dh + 1);
+    if (dx + dw < S.W - 1 && dy + dh < S.H - 1) ctx.drawImage(img, iw - e, ih - e, e, e, dx + dw - 1, dy + dh - 1, S.W - dx - dw + 1, S.H - dy - dh + 1);
     ctx.globalAlpha = 1;
   }
 
