@@ -35,13 +35,15 @@ SEL="${SEL#+}"
 mkdir -p "$OUT"; rm -f "$OUT"/*.jpg "$OUT"/*.webp
 # lossless PNG intermediates
 ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2:flags=lanczos" -fps_mode vfr -start_number 0 "$TMP/%02d.png"
-# expand duplicate indices (ffmpeg's select emits each source frame once)
+# expand duplicate indices (ffmpeg's select emits each distinct source frame once, numbered 00..U-1).
+# Map every output position k to its unique-file number u(k) <= k, then fill from the highest k down
+# so no source file is overwritten before it has been copied.
 if [ -n "${IDX:-}" ]; then
-  k=0; prev=-1; j=0
-  for idx in $IDX; do
-    if [ "$idx" = "$prev" ]; then cp "$(printf "%s/%02d.png" "$TMP" $((k-1)))" "$(printf "%s/%02d.png" "$TMP" $k)"; else
-      src="$(printf "%s/%02d.png" "$TMP" $j)"; dst="$(printf "%s/%02d.png" "$TMP" $k)"; [ "$src" != "$dst" ] && mv "$src" "$dst"; j=$((j+1)); fi
-    prev=$idx; k=$((k+1))
+  U=(); prev=-1; u=-1
+  for idx in $IDX; do [ "$idx" != "$prev" ] && u=$((u+1)); U+=($u); prev=$idx; done
+  for ((k=${#U[@]}-1; k>=0; k--)); do
+    src="$(printf "%s/%02d.png" "$TMP" ${U[$k]})"; dst="$(printf "%s/%02d.png" "$TMP" $k)"
+    [ "$src" != "$dst" ] && cp "$src" "$dst"
   done
 fi
 # Seam crossfade: the last SEAM frames dissolve towards frame 00, so a full turn lands exactly
