@@ -149,14 +149,19 @@
     S.dirty = true;
   }
 
-  function cover(img, alpha) {
+  // Focal point per view (fraction of the frame kept in view when cropping): [desktop x,y], [mobile x,y]
+  const FOCUS = {
+    rack:  { d: [0.44, 0.42], m: [0.40, 0.50] },
+    model: { d: [0.40, 0.50], m: [0.40, 0.50] },
+  };
+
+  function cover(img, alpha, view) {
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     const s = Math.max(S.W / iw, S.H / ih);
     const dw = iw * s, dh = ih * s;
-    const mob = isMobile();
-    const px = mob ? 0.40 : 0.44, py = mob ? 0.50 : 0.42;
+    const f = FOCUS[view || S.view][isMobile() ? 'm' : 'd'];
     ctx.globalAlpha = alpha;
-    ctx.drawImage(img, (S.W - dw) * px, (S.H - dh) * py, dw, dh);
+    ctx.drawImage(img, (S.W - dw) * f[0], (S.H - dh) * f[1], dw, dh);
     ctx.globalAlpha = 1;
   }
 
@@ -166,8 +171,8 @@
     const i0 = Math.floor(f) % FRAMES, i1 = (i0 + 1) % FRAMES, frac = f - Math.floor(f);
     const a = seq.nearest(i0), b = seq.imgs[i1];
     if (!a) { ctx.fillStyle = '#cbc6bd'; ctx.fillRect(0, 0, S.W, S.H); return; }
-    cover(a, 1);
-    if (b && b !== a && frac > 0.02 && seq.imgs[i0]) cover(b, frac);
+    cover(a, 1, view);
+    if (b && b !== a && frac > 0.02 && seq.imgs[i0]) cover(b, frac, view);
   }
 
   function snapshot() {

@@ -20,7 +20,7 @@ Then open http://127.0.0.1:5173 — or simply open `index.html` in a browser
 | `css/styles.css` | Design system (glass UI, forest-green primary), desktop + mobile layouts |
 | `js/app.js` | Scene engine (scrub / drag / wheel / keys), compositing crossfades, bag, overlays |
 | `assets/seq/<id>-rack/`, `assets/seq/<id>-model/` | 360° turntable sequences, 40 JPEG frames each (≈2.8 MB per sequence), scrubbed by drag |
-| `assets/img/` | Still renders used for tiles, bag thumbnails and first paint |
+| `assets/img/` | Still renders (rack 3:2, full-length model 16:9) used for tiles, bag thumbnails and first paint |
 | `tools/make_seq.sh` | Turns a 5 s turntable clip into a seamless 40-frame sequence (finds the loop point, samples frames) |
 | `serve.js` | Tiny static server for local preview |
 
@@ -28,7 +28,7 @@ Then open http://127.0.0.1:5173 — or simply open `index.html` in a browser
 
 - **Drag the scene, the slider, or scroll** to rotate the jacket a full 360° on its hanger (light inertia, settles on a crisp frame).
 - **‹ 01 › pill, card arrows, swatches, collection tiles** switch product with a quick in-place crossfade. Keyboard: ← →.
-- **See it on** crossfades to the on-model turntable; drag to turn the model. `M` toggles view, `B` opens bag, `Esc` closes.
+- **See it on** crossfades to a full-length on-model turntable (wide shot, head to shoes); drag to turn the model. `M` toggles view, `B` opens bag, `Esc` closes.
 - **Add to bag** keeps a local bag with quantities and subtotal (checkout is a stub).
 
 ## Editing products
