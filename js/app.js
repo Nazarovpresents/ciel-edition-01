@@ -12,30 +12,30 @@
   const PRODUCTS = [
     {
       id: 'minuit', name: 'Minuit', price: 890, ref: 'Ref. 2201-MIN', swatch: '#232633',
-      tagline: 'Midnight chalk-stripe, double-breasted. Peak lapels, cut close through the waist.',
+      tagline: 'Black with a crisp white pinstripe, double-breasted. Six buttons, wide peak lapels.',
       composition: 'Shell: 100% virgin wool, Super 120s, 280 g, half-canvassed. Lining: Bemberg cupro. Buttons: natural horn.',
       care: 'Dry clean only. Brush after wear, rest 24 hours between wears, store on a shaped hanger.',
       lowSizes: ['54'],
     },
     {
       id: 'tabac', name: 'Tabac', price: 790, ref: 'Ref. 2202-TAB', swatch: '#6a4a3b',
-      tagline: 'Tobacco-brown windowpane check. Single-breasted, two buttons, soft natural shoulder.',
+      tagline: 'Tobacco windowpane check, one button, peak lapels. Worn with plain camel flannel trousers.',
       composition: 'Shell: 100% virgin wool, Super 120s, 280 g, half-canvassed. Lining: Bemberg cupro. Buttons: natural horn.',
       care: 'Dry clean only. Brush after wear, rest 24 hours between wears, store on a shaped hanger.',
       lowSizes: [],
     },
     {
       id: 'granit', name: 'Granit', price: 760, ref: 'Ref. 2203-GRA', swatch: '#8d8f8c',
-      tagline: 'Light grey glen check. Two buttons, notch lapel, the suit for every day that counts.',
+      tagline: 'Light grey glen check, two buttons, peak lapels. Worn with chocolate-brown flannel trousers.',
       composition: 'Shell: 100% virgin wool, Super 120s, 280 g, half-canvassed. Lining: Bemberg cupro. Buttons: natural horn.',
       care: 'Dry clean only. Brush after wear, rest 24 hours between wears, store on a shaped hanger.',
       lowSizes: ['46'],
     },
     {
       id: 'grenat', name: 'Grenat', price: 980, ref: 'Ref. 2204-GRE', swatch: '#5c2b3b',
-      tagline: 'Garnet dinner jacket with a black satin peak lapel. Black trousers, bow tie, after dark.',
-      composition: 'Shell: 100% virgin wool, Super 130s, 260 g, half-canvassed. Lapel: silk satin. Lining: Bemberg cupro.',
-      care: 'Dry clean only. Steam, never iron the satin. Store on a shaped hanger in a breathable bag.',
+      tagline: 'Plum micro-houndstooth dinner jacket, black velvet peak lapels. Black trousers, bow tie, after dark.',
+      composition: 'Shell: 100% virgin wool, Super 130s, 260 g, half-canvassed. Lapel and pocket jets: cotton velvet. Lining: Bemberg cupro.',
+      care: 'Dry clean only. Steam, never iron the velvet; brush it with the pile. Store on a shaped hanger in a breathable bag.',
       lowSizes: ['52'],
     },
   ];
