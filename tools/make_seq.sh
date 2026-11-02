@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Turn a 360° turntable clip into a seamless 40-frame JPEG sequence.
-# usage: tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
+# usage: [FMT=webp] [WEBP_Q=80] tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
 set -euo pipefail
 CLIP="$1"; OUT="$2"; FRAMES="${3:-40}"; WIDTH="${4:-1440}"; END_OVERRIDE="${5:-}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -22,6 +22,12 @@ for ((k=0;k<FRAMES;k++)); do
   SEL="${SEL}+eq(n\,${idx})"
 done
 SEL="${SEL#+}"
-mkdir -p "$OUT"; rm -f "$OUT"/*.jpg
-ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2" -fps_mode vfr -start_number 0 -q:v 4 -pix_fmt yuvj420p "$OUT/%02d.jpg"
+mkdir -p "$OUT"; rm -f "$OUT"/*.jpg "$OUT"/*.webp
+if [ "${FMT:-jpg}" = "webp" ]; then
+  # lossless PNG intermediates → WebP (q=${WEBP_Q:-80})
+  ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2:flags=lanczos" -fps_mode vfr -start_number 0 "$TMP/%02d.png"
+  for f in "$TMP"/[0-9][0-9].png; do cwebp -quiet -q "${WEBP_Q:-80}" -m 4 -sharp_yuv "$f" -o "$OUT/$(basename "${f%.png}").webp"; done
+else
+  ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2" -fps_mode vfr -start_number 0 -q:v 4 -pix_fmt yuvj420p "$OUT/%02d.jpg"
+fi
 echo "wrote $(ls "$OUT" | wc -l | tr -d ' ') frames to $OUT ($(du -sh "$OUT" | cut -f1))"

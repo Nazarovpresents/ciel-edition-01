@@ -19,9 +19,10 @@ Then open http://127.0.0.1:5173 — or simply open `index.html` in a browser
 | `index.html` | Page structure: scene, HUD, product card, collection overlay, bag drawer, mobile details sheet |
 | `css/styles.css` | Design system (glass UI, forest-green primary), desktop + mobile layouts |
 | `js/app.js` | Scene engine (scrub / drag / wheel / keys), compositing crossfades, bag, overlays |
-| `assets/seq/<id>-rack/`, `assets/seq/<id>-model/` | 360° turntable sequences, 40 JPEG frames each (≈2.8 MB per sequence), scrubbed by drag |
+| `assets/seq/<id>-rack/`, `assets/seq/<id>-model/` | 360° turntable sequences, 40 JPEG frames at 1440 px (≈2.5 MB per sequence) — loads first everywhere |
+| `assets/seq4k/<id>-rack/`, `assets/seq4k/<id>-model/` | The same 40 frames in 4K WebP (≈7–11 MB per sequence), layered on top for large / high-density screens once loaded |
 | `assets/img/` | Still renders (rack 3:2, full-length model 16:9) used for tiles, bag thumbnails and first paint |
-| `tools/make_seq.sh` | Turns a 5 s turntable clip into a seamless 40-frame sequence (finds the loop point, samples frames) |
+| `tools/make_seq.sh` | Turns a 5 s turntable clip into a 40-frame sequence (`FMT=webp` for the 4K tier; optional loop-end frame as 5th argument) |
 | `serve.js` | Tiny static server for local preview |
 
 ## Interactions

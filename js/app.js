@@ -36,7 +36,14 @@
   const SIZES = ['S', 'M', 'L', 'XL'];
   const FRAMES = 40;                                   // frames per 360° sequence
   const VIEWS = ['rack', 'model'];
-  const seqSrc = (p, v, i) => `assets/seq/${p.id}-${v}/${String(i).padStart(2, '0')}.jpg`;
+  // Two frame sets: 'std' (1440px JPEG) loads first everywhere; 'hi' (4K WebP) is layered on top
+  // for large / high-density screens once it arrives.
+  const SETS = { std: { dir: 'seq', ext: 'jpg' }, hi: { dir: 'seq4k', ext: 'webp' } };
+  const wantHi = () => {
+    const c = navigator.connection; if (c && (c.saveData || /2g/.test(c.effectiveType || ''))) return false;
+    return Math.min(window.devicePixelRatio || 1, 2) * window.innerWidth >= 1800;
+  };
+  const seqSrc = (p, v, i, set = 'std') => `assets/${SETS[set].dir}/${p.id}-${v}/${String(i).padStart(2, '0')}.${SETS[set].ext}`;
   const stillSrc = (p, v) => v === 'rack' ? `assets/img/rack-${p.id}.jpg` : `assets/img/model-${p.id}-front.jpg`;
   const money = (n) => `$${n.toFixed(2)}`;
   const pad = (n) => String(n).padStart(2, '0');
@@ -95,7 +102,7 @@
   })();
 
   class Seq {
-    constructor(p, v) { this.p = p; this.v = v; this.imgs = new Array(FRAMES).fill(null); this.loaded = 0; this.started = false; this.done = false; this.still = null; }
+    constructor(p, v, set = 'std') { this.p = p; this.v = v; this.set = set; this.imgs = new Array(FRAMES).fill(null); this.loaded = 0; this.started = false; this.done = false; this.still = null; }
     load(onProgress) {
       if (this.started) return this.promise;
       this.started = true;
@@ -107,7 +114,7 @@
           im.onload = () => { this.imgs[i] = im; this.loaded += 1; S.dirty = true; onProgress && onProgress(this.loaded / FRAMES); finish(); };
           im.onerror = finish;
           // stagger slightly so the first coarse frames win the connection race
-          setTimeout(() => { im.src = seqSrc(this.p, this.v, i); }, Math.min(k, 12) * 8);
+          setTimeout(() => { im.src = seqSrc(this.p, this.v, i, this.set); }, Math.min(k, 12) * 8);
         });
       });
       return this.promise;
@@ -129,20 +136,37 @@
     }
   }
   const seqs = new Map();
-  PRODUCTS.forEach((p) => VIEWS.forEach((v) => seqs.set(`${p.id}:${v}`, new Seq(p, v))));
-  const seqOf = (i, v) => seqs.get(`${PRODUCTS[i].id}:${v}`);
+  PRODUCTS.forEach((p) => VIEWS.forEach((v) => {
+    seqs.set(`${p.id}:${v}:std`, new Seq(p, v, 'std'));
+    seqs.set(`${p.id}:${v}:hi`, new Seq(p, v, 'hi'));
+  }));
+  const seqOf = (i, v, set = 'std') => seqs.get(`${PRODUCTS[i].id}:${v}:${set}`);
+  const HI = wantHi();
 
-  // Background queue: current rack → other racks → current model → other models
+  // Background queue: current rack (std, then 4K) → other racks → current model (std, 4K) → the rest
   async function loadQueue() {
     const order = [];
-    for (let k = 0; k < N; k++) order.push(seqOf((S.index + k) % N, 'rack'));
-    for (let k = 0; k < N; k++) order.push(seqOf((S.index + k) % N, 'model'));
+    const cur = S.index;
+    order.push(seqOf(cur, 'rack', 'std'));
+    if (HI) order.push(seqOf(cur, 'rack', 'hi'));
+    for (let k = 1; k < N; k++) order.push(seqOf((cur + k) % N, 'rack', 'std'));
+    order.push(seqOf(cur, 'model', 'std'));
+    if (HI) order.push(seqOf(cur, 'model', 'hi'));
+    for (let k = 1; k < N; k++) order.push(seqOf((cur + k) % N, 'model', 'std'));
+    if (HI) for (let k = 1; k < N; k++) order.push(seqOf((cur + k) % N, 'rack', 'hi'));
+    if (HI) for (let k = 1; k < N; k++) order.push(seqOf((cur + k) % N, 'model', 'hi'));
     for (const s of order) { if (!s.done) await s.load(); }
+  }
+  // Prefer the 4K frame when it has arrived, else the standard one (nearest loaded).
+  function pickFrame(index, view, i, exact) {
+    if (HI) { const h = seqOf(index, view, 'hi'); if (h.imgs[i]) return h.imgs[i]; }
+    const sd = seqOf(index, view, 'std');
+    return exact ? sd.imgs[i] : sd.nearest(i);
   }
 
   /* ---------- Canvas ---------- */
   function resize() {
-    S.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    S.dpr = Math.min(window.devicePixelRatio || 1, HI ? 2 : 1.5);
     S.W = Math.round(el.scene.clientWidth * S.dpr);
     S.H = Math.round(el.scene.clientHeight * S.dpr);
     S.cardTop = isMobile() ? el.card.getBoundingClientRect().top : el.scene.clientHeight;
@@ -185,13 +209,13 @@
   }
 
   function drawState(index, view, angle) {
-    const seq = seqOf(index, view);
     const f = wrap01(angle) * FRAMES;
     const i0 = Math.floor(f) % FRAMES, i1 = (i0 + 1) % FRAMES, frac = f - Math.floor(f);
-    const a = seq.nearest(i0), b = seq.imgs[i1];
+    const a = pickFrame(index, view, i0, false), b = pickFrame(index, view, i1, true);
+    const a0 = pickFrame(index, view, i0, true);
     if (!a) { ctx.fillStyle = '#cbc6bd'; ctx.fillRect(0, 0, S.W, S.H); return; }
     cover(a, 1, view);
-    if (b && b !== a && frac > 0.02 && seq.imgs[i0]) cover(b, frac, view);
+    if (b && b !== a && frac > 0.02 && a0) cover(b, frac, view);
   }
 
   function snapshot() {
@@ -223,7 +247,7 @@
     if (i === S.index) return;
     beginCrossfade(260);
     S.index = i; S.angle = 0; S.vel = 0;
-    seqOf(i, S.view).load();
+    seqOf(i, S.view).load(); if (HI) seqOf(i, S.view, 'hi').load();
     updateCard();
     S.dirty = true;
   }
@@ -232,7 +256,7 @@
     if (v === S.view) return;
     beginCrossfade(380);
     S.view = v; S.angle = 0; S.vel = 0;
-    seqOf(S.index, v).load();
+    seqOf(S.index, v).load(); if (HI) seqOf(S.index, v, 'hi').load();
     document.body.classList.toggle('view-model', v === 'model');
     el.viewToggleLabel.textContent = v === 'model' ? 'On model' : 'On rack';
     el.scrubHint.textContent = v === 'model' ? 'Drag to turn' : 'Drag to rotate';
@@ -549,7 +573,7 @@
   async function boot() {
     buildCard(); buildCollection(); renderBag(); updateCard();
     resize();
-    seqs.forEach((s) => s.loadStill());
+    seqs.forEach((s) => { if (s.set === 'std') s.loadStill(); });
 
     const first = seqOf(0, 'rack');
     requestAnimationFrame(frame);
