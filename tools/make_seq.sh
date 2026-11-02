@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Turn a 360° turntable clip into a seamless 40-frame JPEG sequence.
-# usage: [FMT=webp] [WEBP_Q=80] tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
+# usage: [FMT=webp] [WEBP_Q=80] [SEAM=4] tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
 set -euo pipefail
 CLIP="$1"; OUT="$2"; FRAMES="${3:-40}"; WIDTH="${4:-1440}"; END_OVERRIDE="${5:-}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -23,11 +23,21 @@ for ((k=0;k<FRAMES;k++)); do
 done
 SEL="${SEL#+}"
 mkdir -p "$OUT"; rm -f "$OUT"/*.jpg "$OUT"/*.webp
+# lossless PNG intermediates
+ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2:flags=lanczos" -fps_mode vfr -start_number 0 "$TMP/%02d.png"
+# Seam crossfade: the last SEAM frames dissolve towards frame 00, so a full turn lands exactly
+# on the first frame and the loop point is invisible.
+SEAM="${SEAM:-4}"
+if [ "$SEAM" -gt 0 ]; then
+  for ((k=1;k<=SEAM;k++)); do
+    idx=$((FRAMES-SEAM-1+k)); w=$(awk -v k=$k -v n=$SEAM 'BEGIN{printf "%.3f", k/(n+1)}')
+    src=$(printf "%s/%02d.png" "$TMP" "$idx")
+    ffmpeg -v error -y -i "$TMP/00.png" -i "$src" -filter_complex "[0:v][1:v]blend=all_mode=normal:all_opacity=$w" "$TMP/blend.png" && mv "$TMP/blend.png" "$src"
+  done
+fi
 if [ "${FMT:-jpg}" = "webp" ]; then
-  # lossless PNG intermediates → WebP (q=${WEBP_Q:-80})
-  ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2:flags=lanczos" -fps_mode vfr -start_number 0 "$TMP/%02d.png"
   for f in "$TMP"/[0-9][0-9].png; do cwebp -quiet -q "${WEBP_Q:-80}" -m 4 -sharp_yuv "$f" -o "$OUT/$(basename "${f%.png}").webp"; done
 else
-  ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2" -fps_mode vfr -start_number 0 -q:v 4 -pix_fmt yuvj420p "$OUT/%02d.jpg"
+  for f in "$TMP"/[0-9][0-9].png; do ffmpeg -v error -y -i "$f" -q:v 4 -pix_fmt yuvj420p "$OUT/$(basename "${f%.png}").jpg"; done
 fi
 echo "wrote $(ls "$OUT" | wc -l | tr -d ' ') frames to $OUT ($(du -sh "$OUT" | cut -f1))"

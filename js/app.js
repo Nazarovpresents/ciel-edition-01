@@ -51,6 +51,21 @@
   const wrap01 = (v) => ((v % 1) + 1) % 1;
   const easeOut = (t) => 1 - Math.pow(1 - t, 3);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Idle turntable: after IDLE_DELAY ms without input the figure keeps turning on its own.
+  // 'loop' = continuous 360° (the sequences are seam-blended, so the loop point is invisible);
+  // 'pingpong' = boomerang-style back and forth.
+  const IDLE_MODE = 'pingpong';
+  const IDLE_DELAY = 2600;
+  const IDLE_TURN_MS = 12000;                          // one full turn every 12 s
+  const FORCE_IDLE = /[?&]idle=1\b/.test(location.search);   // QA switch: idle turn even under reduced-motion / hidden tab
+  // In pingpong mode the figure turns 0→360° and then back 360°→0, so it never jumps to frame 0.
+  // S.pos is an unbounded position in turns; the shown angle is a triangle wave of it.
+  const PING = IDLE_MODE === 'pingpong';
+  const angleOf = (pos) => PING ? 1 - Math.abs((((pos % 2) + 2) % 2) - 1) : wrap01(pos);
+  const frameOf = (angle) => {
+    if (PING) { const f = clamp(angle, 0, 1) * (FRAMES - 1); const i0 = Math.floor(f); return { i0, i1: Math.min(i0 + 1, FRAMES - 1), frac: f - i0 }; }
+    const f = wrap01(angle) * FRAMES; const i0 = Math.floor(f) % FRAMES; return { i0, i1: (i0 + 1) % FRAMES, frac: f - Math.floor(f) };
+  };
   const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
 
   /* ---------- DOM ---------- */
@@ -77,7 +92,7 @@
   /* ---------- State ---------- */
   const S = {
     view: 'rack', index: 0,
-    angle: 0,                 // 0..1 = one full turn
+    pos: 0,                   // unbounded position in turns (angle shown = angleOf(pos))
     vel: 0,                   // turns per ms (inertia after release)
     dragging: false,
     size: 'M', bag: [],
@@ -86,7 +101,7 @@
     par: { x: 0, y: 0, tx: 0, ty: 0 },
     xfade: null,              // { snap, start, dur }
     openPanel: null,
-    wheelTimer: 0, lastInput: 0,
+    wheelTimer: 0, lastInput: 0, autoDir: 1,
     W: 0, H: 0, dpr: 1, cardTop: 0,
   };
 
@@ -209,8 +224,7 @@
   }
 
   function drawState(index, view, angle) {
-    const f = wrap01(angle) * FRAMES;
-    const i0 = Math.floor(f) % FRAMES, i1 = (i0 + 1) % FRAMES, frac = f - Math.floor(f);
+    const { i0, i1, frac } = frameOf(angle);
     const a = pickFrame(index, view, i0, false), b = pickFrame(index, view, i1, true);
     const a0 = pickFrame(index, view, i0, true);
     if (!a) { ctx.fillStyle = '#cbc6bd'; ctx.fillRect(0, 0, S.W, S.H); return; }
@@ -231,7 +245,7 @@
   }
 
   function render(now) {
-    drawState(S.index, S.view, S.angle);
+    drawState(S.index, S.view, angleOf(S.pos));
     if (S.xfade) {
       const p = clamp((now - S.xfade.start) / S.xfade.dur, 0, 1);
       ctx.globalAlpha = 1 - easeOut(p);
@@ -246,7 +260,7 @@
     i = (i + N) % N;
     if (i === S.index) return;
     beginCrossfade(260);
-    S.index = i; S.angle = 0; S.vel = 0;
+    S.index = i; S.pos = 0; S.vel = 0; S.autoDir = 1; S.lastInput = performance.now();
     seqOf(i, S.view).load(); if (HI) seqOf(i, S.view, 'hi').load();
     updateCard();
     S.dirty = true;
@@ -255,7 +269,7 @@
   function setView(v) {
     if (v === S.view) return;
     beginCrossfade(380);
-    S.view = v; S.angle = 0; S.vel = 0;
+    S.view = v; S.pos = 0; S.vel = 0; S.autoDir = 1; S.lastInput = performance.now();
     seqOf(S.index, v).load(); if (HI) seqOf(S.index, v, 'hi').load();
     document.body.classList.toggle('view-model', v === 'model');
     el.viewToggleLabel.textContent = v === 'model' ? 'On model' : 'On rack';
@@ -272,17 +286,26 @@
 
     // Inertia after release
     if (!S.dragging && Math.abs(S.vel) > 1e-6) {
-      S.angle = wrap01(S.angle + S.vel * dt);
+      S.pos += S.vel * dt;
       S.vel *= Math.exp(-dt / 320);
       if (Math.abs(S.vel) < 2e-6) S.vel = 0;
       S.dirty = true;
+    } else if (!S.dragging && S.ready && !S.openPanel && (FORCE_IDLE || (!document.hidden && !reduceMotion)) && now - S.lastInput > IDLE_DELAY) {
+      // Idle turntable: keeps turning on its own (eases in over the first second).
+      // In pingpong mode a growing pos already yields 0→360°→0, so a single direction is enough.
+      const ease = Math.min(1, (now - S.lastInput - IDLE_DELAY) / 1000);
+      S.pos += (dt / IDLE_TURN_MS) * ease * ease;
+      S.dirty = true;
     } else if (!S.dragging && now - S.lastInput > 140) {
       // At rest: settle onto the nearest exact frame so the still image is crisp
-      const target = Math.round(S.angle * FRAMES) / FRAMES;
-      let diff = target - S.angle;
-      if (diff > 0.5) diff -= 1; if (diff < -0.5) diff += 1;
-      if (Math.abs(diff) > 0.0004) { S.angle = wrap01(S.angle + diff * (1 - Math.exp(-dt / 110))); S.dirty = true; }
-      else if (diff !== 0) { S.angle = wrap01(target); S.dirty = true; }
+      const steps = PING ? FRAMES - 1 : FRAMES;
+      const a = angleOf(S.pos);
+      const target = Math.round(a * steps) / steps;
+      let diff = target - a;
+      if (!PING) { if (diff > 0.5) diff -= 1; if (diff < -0.5) diff += 1; }
+      const leg = PING && ((((S.pos % 2) + 2) % 2) > 1) ? -1 : 1;   // descending leg → pos moves opposite to angle
+      if (Math.abs(diff) > 0.0004) { S.pos += leg * diff * (1 - Math.exp(-dt / 110)); S.dirty = true; }
+      else if (diff !== 0) { S.pos += leg * diff; S.dirty = true; }
     }
 
     // Parallax + intro settle (CSS transform on the canvas wrapper)
@@ -298,10 +321,11 @@
     if (S.dirty || S.xfade) {
       render(now);
       S.dirty = !!S.xfade;
-      const pct = (wrap01(S.angle) * 100).toFixed(2) + '%';
+      const ang = angleOf(S.pos);
+      const pct = (ang * 100).toFixed(2) + '%';
       el.scrubFill.style.width = pct;
       el.scrubHandle.style.left = pct;
-      el.scrubTrack.setAttribute('aria-valuenow', String(Math.round(wrap01(S.angle) * 360)));
+      el.scrubTrack.setAttribute('aria-valuenow', String(Math.round(ang * 360)));
     }
     requestAnimationFrame(frame);
   }
@@ -458,14 +482,14 @@
   function hideHint() { el.scrubHint.classList.add('is-hidden'); }
 
   (function sceneDrag() {
-    let startX = 0, startAngle = 0, lastX = 0, lastT = 0, v = 0, moved = false;
+    let startX = 0, startPos = 0, lastX = 0, lastT = 0, v = 0, moved = false;
     const turnPx = () => Math.max(420, window.innerWidth * 0.85);   // px for one full turn
     el.scene.addEventListener('pointerdown', (e) => {
       if (S.openPanel || !S.ready) return;
       if (e.button !== undefined && e.button !== 0) return;
-      S.dragging = true; moved = false; S.vel = 0;
+      S.dragging = true; moved = false; S.vel = 0; S.lastInput = performance.now();
       el.scene.classList.add('is-dragging');
-      startX = lastX = e.clientX; startAngle = S.angle; lastT = performance.now(); v = 0;
+      startX = lastX = e.clientX; startPos = S.pos; lastT = performance.now(); v = 0;
       try { el.scene.setPointerCapture(e.pointerId); } catch (_) { /* synthetic */ }
     });
     el.scene.addEventListener('pointermove', (e) => {
@@ -473,7 +497,7 @@
       const now = performance.now();
       const dx = e.clientX - startX;
       if (Math.abs(dx) > 3) moved = true;
-      S.angle = wrap01(startAngle - dx / turnPx()); S.lastInput = now;
+      S.pos = startPos - dx / turnPx(); S.lastInput = now;
       const dtm = Math.max(1, now - lastT);
       v = v * 0.5 + (-(e.clientX - lastX) / turnPx() / dtm) * 0.5;   // turns per ms
       lastX = e.clientX; lastT = now;
@@ -496,7 +520,9 @@
     let on = false;
     const setFromX = (x) => {
       const r = el.scrubTrack.getBoundingClientRect();
-      S.angle = clamp((x - r.left) / r.width, 0, 0.9999); S.vel = 0; S.dirty = true; S.lastInput = performance.now();
+      const a = clamp((x - r.left) / r.width, 0, PING ? 1 : 0.9999);
+      S.pos = PING ? 2 * Math.floor(((S.pos % 2) + 2) % 2 / 2) + a : a;   // stay on the ascending leg
+      S.vel = 0; S.dirty = true; S.lastInput = performance.now();
     };
     el.scrubTrack.addEventListener('pointerdown', (e) => {
       on = true; setFromX(e.clientX); hideHint();
@@ -507,8 +533,8 @@
     el.scrubTrack.addEventListener('pointerup', end);
     el.scrubTrack.addEventListener('pointercancel', end);
     el.scrubTrack.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight') { e.preventDefault(); S.angle = wrap01(S.angle + 1 / FRAMES); S.dirty = true; hideHint(); }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); S.angle = wrap01(S.angle - 1 / FRAMES); S.dirty = true; hideHint(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); S.pos += 1 / FRAMES; S.lastInput = performance.now(); S.dirty = true; hideHint(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); S.pos -= 1 / FRAMES; S.lastInput = performance.now(); S.dirty = true; hideHint(); }
     });
   })();
 
@@ -517,7 +543,7 @@
     if (S.openPanel || !S.ready || S.dragging) return;
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
     const d = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * unit;
-    S.angle = wrap01(S.angle + d * 0.00045); S.vel = 0; S.dirty = true; S.lastInput = performance.now();
+    S.pos += d * 0.00045; S.vel = 0; S.dirty = true; S.lastInput = performance.now();
     hideHint();
   }, { passive: true });
 
@@ -579,7 +605,7 @@
     requestAnimationFrame(frame);
     await first.load((p) => { el.loaderBar.style.width = `${Math.round(p * 100)}%`; });
 
-    S.ready = true; S.dirty = true;
+    S.ready = true; S.dirty = true; S.lastInput = performance.now();
     document.body.classList.add('is-ready');
     el.loader.classList.add('is-done');
     setTimeout(() => el.switcher.classList.add('is-visible'), 600);

@@ -27,7 +27,8 @@ Then open http://127.0.0.1:5173 — or simply open `index.html` in a browser
 
 ## Interactions
 
-- **Drag the scene, the slider, or scroll** to rotate the jacket a full 360° on its hanger (light inertia, settles on a crisp frame).
+- **Drag the scene, the slider, or scroll** to rotate the jacket a full 360° on its hanger (light inertia, settles on a crisp frame). Rotation is boomerang-style: 0→360° and back, so there is never a jump back to the first frame.
+- **Leave it alone for ~2.5 s** and the turntable keeps turning on its own (`IDLE_MODE`, `IDLE_DELAY`, `IDLE_TURN_MS` at the top of `js/app.js`; set `IDLE_MODE = 'loop'` for one-directional spinning).
 - **‹ 01 › pill, card arrows, swatches, collection tiles** switch product with a quick in-place crossfade. Keyboard: ← →.
 - **See it on** crossfades to a full-length on-model turntable (wide shot, head to shoes); drag to turn the model. `M` toggles view, `B` opens bag, `Esc` closes.
 - **Add to bag** keeps a local bag with quantities and subtotal (checkout is a stub).
