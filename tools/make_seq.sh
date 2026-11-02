@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Turn a 360° turntable clip into a seamless 40-frame JPEG sequence.
-# usage: [FMT=webp] [WEBP_Q=80] [SEAM=4] tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
+# usage: [FMT=webp] [WEBP_Q=80] [SEAM=0] [IDX="…"] tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
 set -euo pipefail
 CLIP="$1"; OUT="$2"; FRAMES="${3:-40}"; WIDTH="${4:-1440}"; END_OVERRIDE="${5:-}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -17,14 +17,33 @@ END=$(awk -v tot="$TOTAL" '
 if [ -n "$END_OVERRIDE" ]; then END="$END_OVERRIDE"; fi
 echo "frames=$TOTAL loop_end=$END"
 SEL=""
-for ((k=0;k<FRAMES;k++)); do
-  idx=$(( (k*END + FRAMES/2) / FRAMES ))
-  SEL="${SEL}+eq(n\,${idx})"
-done
+if [ -n "${IDX:-}" ]; then
+  # explicit source-frame indices (e.g. from tools/angle_frames.py); duplicates are allowed
+  prev=-1; dup=""
+  for idx in $IDX; do
+    if [ "$idx" = "$prev" ]; then dup="$dup $idx"; else SEL="${SEL}+eq(n\,${idx})"; fi
+    prev=$idx
+  done
+  echo "indices: $IDX"
+else
+  for ((k=0;k<FRAMES;k++)); do
+    idx=$(( (k*END + FRAMES/2) / FRAMES ))
+    SEL="${SEL}+eq(n\,${idx})"
+  done
+fi
 SEL="${SEL#+}"
 mkdir -p "$OUT"; rm -f "$OUT"/*.jpg "$OUT"/*.webp
 # lossless PNG intermediates
 ffmpeg -v error -y -i "$CLIP" -vf "select='${SEL}',scale=${WIDTH}:-2:flags=lanczos" -fps_mode vfr -start_number 0 "$TMP/%02d.png"
+# expand duplicate indices (ffmpeg's select emits each source frame once)
+if [ -n "${IDX:-}" ]; then
+  k=0; prev=-1; j=0
+  for idx in $IDX; do
+    if [ "$idx" = "$prev" ]; then cp "$(printf "%s/%02d.png" "$TMP" $((k-1)))" "$(printf "%s/%02d.png" "$TMP" $k)"; else
+      src="$(printf "%s/%02d.png" "$TMP" $j)"; dst="$(printf "%s/%02d.png" "$TMP" $k)"; [ "$src" != "$dst" ] && mv "$src" "$dst"; j=$((j+1)); fi
+    prev=$idx; k=$((k+1))
+  done
+fi
 # Seam crossfade: the last SEAM frames dissolve towards frame 00, so a full turn lands exactly
 # on the first frame and the loop point is invisible.
 SEAM="${SEAM:-4}"

@@ -54,7 +54,7 @@
   // Idle turntable: after IDLE_DELAY ms without input the figure keeps turning on its own.
   // 'loop' = continuous 360° (the sequences are seam-blended, so the loop point is invisible);
   // 'pingpong' = boomerang-style back and forth.
-  const IDLE_MODE = 'pingpong';
+  const IDLE_MODE = 'loop';
   const IDLE_DELAY = 2600;
   const IDLE_TURN_MS = 12000;                          // one full turn every 12 s
   const FORCE_IDLE = /[?&]idle=1\b/.test(location.search);   // QA switch: idle turn even under reduced-motion / hidden tab
