@@ -3,3 +3,10 @@
 *.mp4
 .DS_Store
 .claude/
+
+# personal reference photos (not published)
+/IMG_*.PNG
+/IMG_*.png
+/IMG_*.jpg
+/IMG_*.jpeg
+/IMG_*.HEIC

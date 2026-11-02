@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Turn a 360° turntable clip into a seamless 40-frame JPEG sequence.
-# usage: tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440]
+# usage: tools/make_seq.sh clip.mp4 assets/seq/<id>-<view> [frames=40] [width=1440] [loop_end_frame]
 set -euo pipefail
-CLIP="$1"; OUT="$2"; FRAMES="${3:-40}"; WIDTH="${4:-1440}"
+CLIP="$1"; OUT="$2"; FRAMES="${3:-40}"; WIDTH="${4:-1440}"; END_OVERRIDE="${5:-}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 TOTAL=$(ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of csv=p=0 "$CLIP")
 ffmpeg -v error -y -i "$CLIP" -frames:v 1 "$TMP/f0.png"
@@ -14,6 +14,7 @@ END=$(awk -v tot="$TOTAL" '
   { for (i=1;i<=NF;i++){ split($i,kv,":"); if(kv[1]=="n") n=kv[2]; if(kv[1]=="psnr_avg") p=kv[2]; }
     if (p=="inf") p=99; if (n>=tot*0.85 && p>best) { best=p; bn=n } }
   END { print bn-1 }' "$TMP/psnr.log")
+if [ -n "$END_OVERRIDE" ]; then END="$END_OVERRIDE"; fi
 echo "frames=$TOTAL loop_end=$END"
 SEL=""
 for ((k=0;k<FRAMES;k++)); do
