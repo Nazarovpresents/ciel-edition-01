@@ -10,3 +10,13 @@
 /IMG_*.jpg
 /IMG_*.jpeg
 /IMG_*.HEIC
+
+# screenshots dropped into the folder (never published)
+/Ekran Resmi*
+/Screenshot*
+/*.png
+/*.PNG
+/*.jpg
+/*.jpeg
+/*.heic
+/*.HEIC
