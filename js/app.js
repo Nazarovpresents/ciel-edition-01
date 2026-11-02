@@ -67,6 +67,7 @@
     const f = wrap01(angle) * FRAMES; const i0 = Math.floor(f) % FRAMES; return { i0, i1: (i0 + 1) % FRAMES, frac: f - Math.floor(f) };
   };
   const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
+  const FINE = window.matchMedia('(pointer: fine)').matches;
 
   /* ---------- DOM ---------- */
   const $ = (id) => document.getElementById(id);
@@ -273,7 +274,7 @@
     seqOf(S.index, v).load(); if (HI) seqOf(S.index, v, 'hi').load();
     document.body.classList.toggle('view-model', v === 'model');
     el.viewToggleLabel.textContent = v === 'model' ? 'On model' : 'On rack';
-    el.scrubHint.textContent = v === 'model' ? 'Drag to turn' : 'Drag to rotate';
+    el.scrubHint.textContent = FINE ? (v === 'model' ? 'Move to turn' : 'Move to rotate') : (v === 'model' ? 'Drag to turn' : 'Drag to rotate');
     el.scrubHint.classList.remove('is-hidden');
     S.dirty = true;
   }
@@ -515,6 +516,26 @@
     el.scene.addEventListener('lostpointercapture', end);
   })();
 
+  /* ---------- Input: hover-to-rotate (mouse, no button) ---------- */
+  // On desktop the figure turns in place as the cursor moves across the scene: one scene width
+  // of travel is one full turn. Relative to the last cursor position, so it never jumps after a
+  // drag or an idle turn; the boomerang mapping handles travel beyond 360°.
+  (function hoverRotate() {
+    if (!window.matchMedia('(pointer: fine)').matches) return;
+    let lastX = null;
+    const turnPx = () => Math.max(420, window.innerWidth * 0.85);
+    el.scene.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') lastX = e.clientX; });
+    el.scene.addEventListener('pointerleave', () => { lastX = null; });
+    el.scene.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || S.dragging || S.openPanel || !S.ready) return;
+      if (lastX === null) { lastX = e.clientX; return; }
+      const dx = e.clientX - lastX; lastX = e.clientX;
+      if (!dx) return;
+      S.pos += dx / turnPx(); S.vel = 0; S.lastInput = performance.now(); S.dirty = true;
+      hideHint();
+    });
+  })();
+
   /* ---------- Input: slider ---------- */
   (function scrubDrag() {
     let on = false;
@@ -598,6 +619,7 @@
   /* ---------- Boot ---------- */
   async function boot() {
     buildCard(); buildCollection(); renderBag(); updateCard();
+    if (FINE) el.scrubHint.textContent = 'Move to rotate';
     resize();
     seqs.forEach((s) => { if (s.set === 'std') s.loadStill(); });
 
