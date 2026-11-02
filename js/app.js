@@ -364,7 +364,7 @@
     [...el.cardSwatches.children].forEach((b, i) => b.classList.toggle('is-active', i === S.index));
     [...el.sizes.children].forEach((b) => b.classList.toggle('is-low', p.lowSizes.includes(b.dataset.size)));
     [...el.collectionGrid.children].forEach((t, i) => t.classList.toggle('is-active', i === S.index));
-    document.title = `${p.name} — CIEL Édition 01`;
+    document.title = `${p.name} — Mario Russo`;
   }
 
   function buildCard() {

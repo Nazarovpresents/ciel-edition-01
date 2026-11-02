@@ -55,7 +55,8 @@ svg { display: block; }
 }
 .loader.is-done { opacity: 0; visibility: hidden; }
 .loader__mark { font-size: 15px; font-weight: 600; letter-spacing: 0.32em; padding-left: 0.32em; }
-.loader__sub { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+.loader__logo { width: 190px; max-width: 60vw; height: auto; display: block; }
+.loader__sub { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; margin-top: 4px; }
 .loader__bar { width: 160px; height: 1px; background: rgba(20, 28, 26, 0.18); margin-top: 12px; overflow: hidden; }
 .loader__bar span { display: block; height: 100%; width: 0; background: var(--ink); transition: width 0.3s var(--ease); }
 
@@ -164,6 +165,7 @@ body.view-model .pill__switch span { transform: translateX(12px); }
   box-shadow: var(--shadow-sm);
 }
 .brand__mark { font-size: 14px; font-weight: 600; letter-spacing: 0.3em; padding-left: 0.3em; }
+.brand__logo { height: 30px; width: auto; display: block; }
 .brand__sub { font-size: 10.5px; color: var(--muted); letter-spacing: 0.02em; }
 
 /* ---------- Switcher pill (‹ 01 ›) ---------- */
@@ -457,6 +459,7 @@ body.view-model .btn__swap > span:last-child { opacity: 1; transform: none; }
     -webkit-backdrop-filter: none; backdrop-filter: none;
   }
   .brand__mark { text-shadow: 0 1px 12px rgba(20,28,26,0.25); }
+  .brand__logo { height: 26px; filter: drop-shadow(0 1px 8px rgba(255,255,255,0.6)); }
   .brand__sub { display: none; }
   .pill { height: 34px; padding: 0 12px; font-size: 11.5px; }
   .switcher { left: auto; right: var(--gutter); top: 64px; transform: translateY(-6px); }
