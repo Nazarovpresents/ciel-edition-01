@@ -20,3 +20,6 @@
 /*.jpeg
 /*.heic
 /*.HEIC
+
+# published hero video (site asset, keep this one)
+!assets/video/hero.mp4

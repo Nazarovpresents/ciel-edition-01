@@ -90,6 +90,8 @@
     viewToggleLabel: $('viewToggleLabel'), addToBag: $('addToBag'), sizeGuide: $('sizeGuide'),
     openCollection: $('openCollection'), closeCollection: $('closeCollection'), collection: $('collection'),
     collectionGrid: $('collectionGrid'), openBag: $('openBag'), closeBag: $('closeBag'), bag: $('bag'),
+    openLookbook: $('openLookbook'), closeLookbook: $('closeLookbook'), lookbook: $('lookbook'), lookbookGrid: $('lookbookGrid'),
+    intro: $('intro'), introEnter: $('introEnter'), introVideo: $('introVideo'),
     bagCount: $('bagCount'), bagTitleCount: $('bagTitleCount'), bagItems: $('bagItems'), bagSubtotal: $('bagSubtotal'),
     checkout: $('checkout'), scrim: $('scrim'), toast: $('toast'), brandLink: $('brandLink'),
     detailsTrigger: $('detailsTrigger'), sheet: $('sheet'), closeSheet: $('closeSheet'), sheetIndex: $('sheetIndex'),
@@ -108,7 +110,7 @@
     intro: 1,
     par: { x: 0, y: 0, tx: 0, ty: 0 },
     xfade: null,              // { snap, start, dur }
-    openPanel: null,
+    openPanel: null, introOpen: true,
     wheelTimer: 0, lastInput: 0, autoDir: 1,
     W: 0, H: 0, dpr: 1, cardTop: 0,
   };
@@ -304,7 +306,7 @@
       S.vel *= Math.exp(-dt / 320);
       if (Math.abs(S.vel) < 2e-6) S.vel = 0;
       S.dirty = true;
-    } else if (!S.dragging && S.ready && !S.openPanel && (FORCE_IDLE || (!document.hidden && !reduceMotion)) && now - S.lastInput > IDLE_DELAY) {
+    } else if (!S.dragging && S.ready && !S.openPanel && !S.introOpen && (FORCE_IDLE || (!document.hidden && !reduceMotion)) && now - S.lastInput > IDLE_DELAY) {
       // Idle turntable: keeps turning on its own (eases in over the first second).
       // In pingpong mode a growing pos already yields 0→360°→0, so a single direction is enough.
       const ease = Math.min(1, (now - S.lastInput - IDLE_DELAY) / 1000);
@@ -401,6 +403,27 @@
     });
   }
 
+  // Editorial lookbook: one premium campaign portrait per suit.
+  const lookSrc = (p) => `assets/img/look-${p.id}.jpg`;
+  function buildLookbook() {
+    PRODUCTS.forEach((p, i) => {
+      const a = document.createElement('button');
+      a.type = 'button'; a.className = 'lb';
+      a.innerHTML = `
+        <img src="${lookSrc(p)}" alt="${p.name}" loading="lazy">
+        <div class="lb__scrim"></div>
+        <div class="lb__cap">
+          <div class="lb__eyebrow">Édition 01 — ${pad(i + 1)}</div>
+          <div class="lb__row"><span class="lb__name">${p.name}</span><span class="lb__price">${money(p.price)}</span></div>
+          <span class="lb__link">See it in the atelier
+            <svg viewBox="0 0 22 12" width="22" height="12" aria-hidden="true"><path d="M1 6h19M15 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>`;
+      a.addEventListener('click', () => { closePanels(); setView('model'); setIndex(i); });
+      el.lookbookGrid.appendChild(a);
+    });
+  }
+
   /* ---------- Bag ---------- */
   function addToBag() {
     const p = PRODUCTS[S.index];
@@ -465,7 +488,7 @@
     el.scrim.classList.add('is-open');
   }
   function closePanels(silent) {
-    ['collection', 'bag', 'sheet'].forEach((n) => { el[n].classList.remove('is-open'); el[n].setAttribute('aria-hidden', 'true'); });
+    ['collection', 'lookbook', 'bag', 'sheet'].forEach((n) => { el[n].classList.remove('is-open'); el[n].setAttribute('aria-hidden', 'true'); });
     el.scrim.classList.remove('is-open');
     S.openPanel = null;
     if (!silent) el.scene.focus?.();
@@ -611,6 +634,8 @@
   el.sizeGuide.addEventListener('click', () => toast(`${PRODUCTS[S.index].name} runs true to size. Model is 6′1″, chest 40″, and wears 50.`));
   el.openCollection.addEventListener('click', () => openPanel('collection'));
   el.closeCollection.addEventListener('click', () => closePanels());
+  el.openLookbook.addEventListener('click', () => openPanel('lookbook'));
+  el.closeLookbook.addEventListener('click', () => closePanels());
   el.openBag.addEventListener('click', () => openPanel('bag'));
   el.closeBag.addEventListener('click', () => closePanels());
   el.detailsTrigger.addEventListener('click', openSheet);
@@ -630,8 +655,37 @@
   })();
 
   /* ---------- Boot ---------- */
+  /* ---------- Cinematic intro ---------- */
+  function enterIntro() {
+    if (!S.introOpen) return;
+    S.introOpen = false;
+    S.lastInput = performance.now();
+    el.intro.classList.add('is-gone');
+    document.body.classList.remove('intro-open');
+    try { el.introVideo.pause(); } catch (_) {}
+    setTimeout(() => { el.intro.style.display = 'none'; }, 1100);
+  }
+  function startIntro() {
+    document.body.classList.add('intro-open');
+    el.introEnter.addEventListener('click', enterIntro);
+    // Try the cinematic hero video; fall back to the Ken Burns poster if absent.
+    const v = el.introVideo;
+    v.src = 'assets/video/hero.mp4';
+    v.addEventListener('canplay', () => { v.classList.add('is-on'); v.play().catch(() => {}); }, { once: true });
+    v.addEventListener('error', () => { v.remove(); }, { once: true });
+    v.load();
+    window.addEventListener('keydown', (e) => { if (e.key === 'Enter' && S.introOpen) enterIntro(); });
+    // Safety: entrance animations can be paused when the tab/pane is hidden; guarantee the
+    // intro content is visible shortly after load regardless.
+    setTimeout(() => {
+      el.intro.querySelectorAll('.intro__logo, .intro__rule, .intro__eyebrow, .intro__line, .intro__enter')
+        .forEach((x) => { x.style.opacity = '1'; x.style.transform = 'none'; });
+    }, 1700);
+  }
+
   async function boot() {
-    buildCard(); buildCollection(); renderBag(); updateCard();
+    buildCard(); buildCollection(); buildLookbook(); renderBag(); updateCard();
+    startIntro();
     if (FINE) el.scrubHint.textContent = 'Move to rotate';
     resize();
     seqs.forEach((s) => { if (s.set === 'std') s.loadStill(); });
